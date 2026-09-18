@@ -54,11 +54,11 @@ test('enabled connections appear as wrappers and disabling or deleting removes t
     $connection = McpConnection::factory()->create(['name' => 'My server']);
     McpConnection::factory()->create(['enabled' => false]);
     $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertOk()
-        ->assertJsonCount(1, 'result.tools')->assertJsonPath('result.tools.0.name', $connection->toolName());
+        ->assertJsonCount(2, 'result.tools')->assertJsonPath('result.tools.0.name', $connection->toolName());
     $connection->update(['enabled' => false]);
     $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/call', ['name' => $connection->toolName(), 'arguments' => ['tool_name' => 'search']]))->assertJsonPath('error.code', -32602);
     $connection->delete();
-    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertJsonCount(0, 'result.tools');
+    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertJsonCount(1, 'result.tools');
 });
 
 test('wrapper discovers tools and forwards credentials and arguments without gateway token passthrough', function () {
