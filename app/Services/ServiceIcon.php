@@ -126,7 +126,7 @@ class ServiceIcon
     ];
 
     /**
-     * Public path of the bundled icon that best matches the name, then the URL host, or null.
+     * Absolute URL of the bundled icon that best matches the name, then the URL host, or null.
      */
     public function resolve(?string $name, ?string $url = null): ?string
     {
@@ -146,9 +146,12 @@ class ServiceIcon
         return null;
     }
 
+    /**
+     * Absolute URLs are required because Filament's image column treats anything else as a storage disk path.
+     */
     public function defaultPath(): string
     {
-        return '/'.self::DIRECTORY.'/default.svg';
+        return url(self::DIRECTORY.'/default.svg');
     }
 
     /**
@@ -188,7 +191,7 @@ class ServiceIcon
     {
         foreach (self::EXTENSIONS as $extension) {
             if (is_file(public_path(self::DIRECTORY.'/'.$slug.'.'.$extension))) {
-                return '/'.self::DIRECTORY.'/'.$slug.'.'.$extension;
+                return url(self::DIRECTORY.'/'.$slug.'.'.$extension);
             }
         }
 
