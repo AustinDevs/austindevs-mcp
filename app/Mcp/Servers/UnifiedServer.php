@@ -13,7 +13,7 @@ class UnifiedServer extends Server
 
     protected string $version = '1.0.0';
 
-    protected string $instructions = 'Each server_* tool represents a connected MCP server. Call list_available_tools first, then call a discovered tool with its name and JSON arguments. Use gateway_logs to inspect this gateway\'s activity log when a connection misbehaves.';
+    protected string $instructions = 'Each connection tool is named after its connected MCP server with a unique ID suffix. Call it with tool_name set to list_available_tools first, then call it with a discovered tool_name and JSON-encoded arguments. Use gateway_logs to inspect this gateway\'s activity log when a connection misbehaves.';
 
     protected function boot(): void
     {

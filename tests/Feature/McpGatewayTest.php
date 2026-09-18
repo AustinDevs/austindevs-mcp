@@ -61,6 +61,38 @@ test('enabled connections appear as wrappers and disabling or deleting removes t
     $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertJsonCount(1, 'result.tools');
 });
 
+test('connection tools expose readable unique names and preserve their titles', function (string $name, string $prefix) {
+    gatewayOwner();
+    $connection = McpConnection::factory()->create(['name' => $name]);
+    $duplicate = McpConnection::factory()->create(['name' => $name]);
+
+    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))
+        ->assertOk()
+        ->assertJsonPath('result.tools.0.name', $prefix.'_'.$connection->id)
+        ->assertJsonPath('result.tools.0.title', $name)
+        ->assertJsonPath('result.tools.1.name', $prefix.'_'.$duplicate->id);
+})->with([
+    'service name' => ['GitHub', 'github'],
+    'spaces and punctuation' => ['My Slack (Work)!', 'my_slack_work'],
+    'accented name' => ['Café', 'cafe'],
+    'no usable characters' => ['!!!', 'connection'],
+    'numeric name' => ['0', '0'],
+    'long name' => [str_repeat('a', 100), str_repeat('a', 62)],
+]);
+
+test('readable connection names discover upstream tools', function () {
+    gatewayOwner();
+    $connection = McpConnection::factory()->create(['name' => 'GitHub']);
+    fakeRemoteMcp();
+
+    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/call', [
+        'name' => 'github_'.$connection->id,
+        'arguments' => ['tool_name' => 'list_available_tools'],
+    ]))->assertOk()->assertJsonPath('result.isError', false);
+
+    Http::assertSent(fn ($request) => $request['method'] === 'tools/list');
+});
+
 test('wrapper discovers tools and forwards credentials and arguments without gateway token passthrough', function () {
     gatewayOwner();
     $connection = McpConnection::factory()->create(['auth_type' => 'bearer', 'credentials' => ['bearer_token' => 'upstream-secret', 'headers' => ['X-Account' => 'personal']]]);

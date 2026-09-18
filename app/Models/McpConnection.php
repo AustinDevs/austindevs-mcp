@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\ServiceIcon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class McpConnection extends Model
 {
@@ -21,7 +22,10 @@ class McpConnection extends Model
 
     public function toolName(): string
     {
-        return 'server_'.$this->id;
+        $name = Str::slug($this->name, '_');
+        $suffix = '_'.$this->id;
+
+        return substr($name !== '' ? $name : 'connection', 0, 64 - strlen($suffix)).$suffix;
     }
 
     /**
