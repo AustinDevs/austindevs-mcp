@@ -62,9 +62,13 @@ class McpConnectionResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->defaultSort('id', 'desc')->columns([
-            ImageColumn::make('favicon')->label('')->size(28),
+            ImageColumn::make('favicon')->label('')->size(28)->state(fn (McpConnection $record): string => $record->iconUrl()),
             TextColumn::make('name')->searchable()->description(fn (McpConnection $record): string => $record->url),
-            TextColumn::make('status')->badge(),
+            TextColumn::make('status')->badge()->color(fn (string $state): string => match ($state) {
+                'Connected' => 'success',
+                'Authorization required', 'Not checked' => 'warning',
+                default => 'danger',
+            }),
             ToggleColumn::make('enabled')->label('Enabled'),
         ])->recordActions([
             Action::make('connect')->label(fn (McpConnection $record): string => empty($record->credentials['access_token']) ? 'Connect' : 'Reconnect')

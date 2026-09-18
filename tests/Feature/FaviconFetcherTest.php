@@ -23,3 +23,13 @@ test('missing favicon and active content return a harmless fallback', function (
     expect(app(FaviconFetcher::class)->fetch('https://example.com/mcp'))->toBeNull();
     Http::assertSentCount(2);
 });
+
+test('clean SVG favicons are accepted', function () {
+    $svg = '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#f06a6a"/></svg>';
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://example.com/' => Http::response('<html><head><link rel="icon" type="image/svg+xml" href="/icon.svg"></head></html>'),
+        'https://example.com/icon.svg' => Http::response($svg, 200, ['Content-Type' => 'image/svg+xml']),
+    ]);
+    expect(app(FaviconFetcher::class)->fetch('https://example.com/mcp'))->toBe('data:image/svg+xml;base64,'.base64_encode($svg));
+});

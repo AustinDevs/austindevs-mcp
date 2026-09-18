@@ -36,6 +36,9 @@ class FaviconFetcher
                     if (in_array($mime, ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon'], true)) {
                         return 'data:'.$mime.';base64,'.base64_encode($response->body());
                     }
+                    if (self::isSvg($response->body())) {
+                        return 'data:image/svg+xml;base64,'.base64_encode($response->body());
+                    }
                 }
             } catch (Throwable) {
                 continue;
@@ -43,5 +46,15 @@ class FaviconFetcher
         }
 
         return null;
+    }
+
+    /**
+     * SVG favicons are common and finfo reports them inconsistently, so detect the root element directly.
+     * Anything carrying active content is refused rather than sanitized.
+     */
+    private static function isSvg(string $body): bool
+    {
+        return preg_match('/^\s*(?:<\?xml[^>]*>\s*)?(?:<!--.*?-->\s*)*(?:<!DOCTYPE[^>]*>\s*)?<svg[\s>]/is', $body)
+            && ! preg_match('/<script|<foreignObject|\son[a-z]+\s*=|javascript:|<!ENTITY/i', $body);
     }
 }
