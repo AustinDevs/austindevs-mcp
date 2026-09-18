@@ -15,6 +15,7 @@ test('brand icons resolve from the connection name', function (string $name, str
     ['Browser MCP', '/img/services/chrome.svg'],
     ['Hermes MCP', '/img/services/hermes.png'],
     ['Trello (Zollege)', '/img/services/trello.png'],
+    ['Diffui.ai', '/img/services/diffui.svg'],
     ['Google Calendar', '/img/services/google-calendar.svg'],
     ['Google Workspace', '/img/services/google-workspace.png'],
     ['My Google thing', '/img/services/google.svg'],

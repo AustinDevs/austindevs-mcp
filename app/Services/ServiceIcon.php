@@ -41,6 +41,7 @@ class ServiceIcon
         'confluence' => ['confluence'],
         'jira' => ['jira'],
         'asana' => ['asana'],
+        'diffui' => ['diffui', 'diff ui'],
         'github' => ['github'],
         'gitlab' => ['gitlab'],
         'bitbucket' => ['bitbucket'],
