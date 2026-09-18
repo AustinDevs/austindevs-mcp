@@ -4,12 +4,14 @@ namespace App\Filament\Resources\McpConnections;
 
 use App\Filament\Resources\McpConnections\Pages\ManageMcpConnections;
 use App\Models\McpConnection;
+use App\Services\ConnectionEditor;
 use App\Services\RemoteMcpClient;
 use App\Services\RemoteUrl;
 use BackedEnum;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -22,6 +24,7 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Arr;
 use Throwable;
 
 class McpConnectionResource extends Resource
@@ -67,6 +70,13 @@ class McpConnectionResource extends Resource
             Action::make('connect')->label(fn (McpConnection $record): string => empty($record->credentials['access_token']) ? 'Connect' : 'Reconnect')
                 ->visible(fn (McpConnection $record): bool => $record->auth_type === 'oauth')
                 ->url(fn (McpConnection $record): string => route('upstream.connect', $record))->postToUrl(),
+            EditAction::make()
+                ->mutateRecordDataUsing(function (array $data, McpConnection $record): array {
+                    $data['credentials'] = Arr::only($record->credentials ?? [], ['client_id', 'client_secret', 'scope', 'bearer_token', 'headers']);
+
+                    return $data;
+                })
+                ->using(fn (McpConnection $record, array $data): McpConnection => app(ConnectionEditor::class)->update($record, $data)),
             Action::make('check')->label('Check')->action(function (McpConnection $record): void {
                 try {
                     $client = new RemoteMcpClient($record);
