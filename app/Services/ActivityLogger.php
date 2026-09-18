@@ -10,7 +10,7 @@ use Throwable;
 
 class ActivityLogger
 {
-    private const REDACTED_KEYS = ['authorization', 'proxy-authorization', 'access_token', 'refresh_token', 'bearer_token', 'client_secret', 'code', 'code_verifier', 'token', 'secret', 'password', 'cookie', 'set-cookie'];
+    private const REDACTED_KEYS = ['authorization', 'proxy-authorization', 'access_token', 'refresh_token', 'bearer_token', 'client_secret', 'code_verifier', 'token', 'secret', 'password', 'cookie', 'set-cookie'];
 
     private const MAX_STRING_LENGTH = 2000;
 

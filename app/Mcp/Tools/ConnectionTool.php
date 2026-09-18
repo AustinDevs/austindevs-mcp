@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Models\McpConnection;
+use App\Services\ActivityLogger;
 use App\Services\RemoteMcpClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -44,14 +45,23 @@ class ConnectionTool extends Tool
         if (! $arguments instanceof \stdClass) {
             return Response::error('Arguments must be a JSON object.');
         }
+        $logger = app(ActivityLogger::class);
+        $started = hrtime(true);
         try {
             $client = new RemoteMcpClient($this->connection);
             $client->initialize();
             $result = $validated['tool_name'] === 'list_available_tools' ? ['tools' => $client->tools()] : $client->call($validated['tool_name'], (array) $arguments);
             $this->connection->update(['status' => 'Connected']);
+            $encoded = json_encode($result, JSON_THROW_ON_ERROR);
+            $logger->info('tool_call', 'Called '.$validated['tool_name'].' on '.$this->connection->name, [
+                'tool_name' => $validated['tool_name'], 'argument_bytes' => strlen($validated['arguments'] ?? '{}'), 'result_bytes' => strlen($encoded), 'is_error' => ! empty($result['isError']),
+            ], $this->connection, (int) ((hrtime(true) - $started) / 1_000_000));
 
-            return ! empty($result['isError']) ? Response::error(json_encode($result, JSON_THROW_ON_ERROR)) : Response::json($result);
-        } catch (Throwable) {
+            return ! empty($result['isError']) ? Response::error($encoded) : Response::json($result);
+        } catch (Throwable $exception) {
+            $logger->error('tool_call', 'Tool call failed on '.$this->connection->name, [
+                'tool_name' => $validated['tool_name'], 'exception' => $exception::class, 'error' => $exception->getMessage(),
+            ], $this->connection, (int) ((hrtime(true) - $started) / 1_000_000));
             if ($this->connection->exists && McpConnection::whereKey($this->connection->id)->exists()) {
                 $this->connection->update(['status' => 'Connection needs attention']);
             }

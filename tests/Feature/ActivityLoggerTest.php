@@ -24,13 +24,13 @@ test('logger records rows with level category connection and duration', function
 test('logger redacts secret keys recursively and truncates long strings', function () {
     $context = [
         'headers' => ['Authorization' => 'Bearer abc', 'X-Account' => 'me', 'Set-Cookie' => 'x'],
-        'access_token' => 'tok', 'nested' => ['client_secret' => 's', 'code' => 'c', 'ok' => 'fine'],
+        'access_token' => 'tok', 'nested' => ['client_secret' => 's', 'code_verifier' => 'c', 'ok' => 'fine'],
         'body' => str_repeat('a', 2500), 'has_code' => true, 'error_code' => 'invalid_grant',
     ];
     $redacted = app(ActivityLogger::class)->redact($context);
     expect($redacted['headers'])->toBe(['Authorization' => '[redacted]', 'X-Account' => 'me', 'Set-Cookie' => '[redacted]']);
     expect($redacted['access_token'])->toBe('[redacted]');
-    expect($redacted['nested'])->toBe(['client_secret' => '[redacted]', 'code' => '[redacted]', 'ok' => 'fine']);
+    expect($redacted['nested'])->toBe(['client_secret' => '[redacted]', 'code_verifier' => '[redacted]', 'ok' => 'fine']);
     expect($redacted['body'])->toEndWith('… [truncated]')->and(strlen($redacted['body']))->toBeLessThan(2100);
     expect($redacted['has_code'])->toBeTrue()->and($redacted['error_code'])->toBe('invalid_grant');
     $log = app(ActivityLogger::class)->error('oauth', str_repeat('m', 300), $context);

@@ -71,6 +71,7 @@ class RemoteMcpClient
         $response = Http::withHeaders($headers)->withoutRedirecting()->connectTimeout(5)->timeout(60)
             ->post(RemoteUrl::validate($this->connection->url), $payload);
         if (! $response->successful()) {
+            app(ActivityLogger::class)->error('upstream', 'Upstream returned HTTP '.$response->status(), ['method' => $method, 'status' => $response->status(), 'body' => $response->body()], $this->connection);
             throw new RuntimeException($response->status() === 401 ? 'Authentication expired. Reconnect this server.' : 'Upstream returned HTTP '.$response->status().'.');
         }
         $this->sessionId = $response->header('Mcp-Session-Id') ?: $this->sessionId;
@@ -95,6 +96,7 @@ class RemoteMcpClient
             }
         }
         if (! is_array($body) || ($body['id'] ?? null) !== $id || isset($body['error']) || ! is_array($body['result'] ?? null)) {
+            app(ActivityLogger::class)->error('upstream', 'Upstream returned an invalid response', ['method' => $method, 'status' => $response->status(), 'body' => $response->body(), 'rpc_error' => is_array($body) ? ($body['error'] ?? null) : null], $this->connection);
             throw new RuntimeException('Upstream returned an invalid response or a protocol error.');
         }
 
