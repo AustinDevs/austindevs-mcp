@@ -14,6 +14,11 @@ class ActivityLogger
 
     private const MAX_STRING_LENGTH = 2000;
 
+    private const STRING_PATTERNS = [
+        '/(bearer\s+)[A-Za-z0-9._~+\/=-]{8,}/i',
+        '/("?(?:access_token|refresh_token|client_secret|bearer_token|code_verifier|token|secret|password)"?\s*[:=]\s*"?)[^"&\s,}]+/i',
+    ];
+
     /** @param array<string, mixed> $context */
     public function info(string $category, string $message, array $context = [], ?McpConnection $connection = null, ?int $durationMs = null): ?GatewayLog
     {
@@ -46,11 +51,19 @@ class ActivityLogger
             } elseif (is_array($value)) {
                 $context[$key] = $this->redact($value);
             } elseif (is_string($value)) {
-                $context[$key] = Str::limit($value, self::MAX_STRING_LENGTH, '… [truncated]');
+                $context[$key] = Str::limit($this->scrub($value), self::MAX_STRING_LENGTH, '… [truncated]');
             }
         }
 
         return $context;
+    }
+
+    /**
+     * Mask bearer tokens and token-like key/value pairs embedded in free text such as upstream response bodies.
+     */
+    private function scrub(string $value): string
+    {
+        return (string) preg_replace(self::STRING_PATTERNS, '$1[redacted]', $value);
     }
 
     /** @param array<string, mixed> $context */

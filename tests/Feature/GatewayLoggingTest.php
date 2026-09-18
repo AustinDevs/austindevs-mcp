@@ -67,3 +67,14 @@ test('invalid upstream responses log the JSON-RPC error', function () {
     expect($upstream->message)->toBe('Upstream returned an invalid response');
     expect($upstream->context['rpc_error'])->toBe(['code' => -32601, 'message' => 'Method not found']);
 });
+
+test('rejected gateway requests are logged', function () {
+    loggingOwner();
+    $this->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list', 'params' => (object) []])->assertUnauthorized();
+    $this->withToken('wrong')->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list', 'params' => (object) []])->assertUnauthorized();
+    $logs = GatewayLog::where('category', 'auth')->orderBy('id')->get();
+    expect($logs)->toHaveCount(2);
+    expect($logs[0]->context)->toMatchArray(['has_bearer' => false, 'reason' => 'unauthenticated']);
+    expect($logs[1]->context)->toMatchArray(['has_bearer' => true, 'reason' => 'unauthenticated'])->toHaveKey('ip');
+    expect($logs->pluck('level')->unique()->all())->toBe(['warning']);
+});

@@ -38,6 +38,13 @@ test('logger redacts secret keys recursively and truncates long strings', functi
     expect($log->fresh()->context['access_token'])->toBe('[redacted]');
 });
 
+test('logger scrubs tokens embedded in free text', function () {
+    $body = '{"access_token":"abc123def456","token_type":"bearer","note":"Authorization: Bearer eyJhbGciOi.payload.sig","status":"ok"}';
+    $scrubbed = app(ActivityLogger::class)->redact(['body' => $body, 'query' => 'client_secret=s3cr3tvalue&scope=read'])['body'];
+    expect($scrubbed)->not->toContain('abc123def456', 'eyJhbGciOi')->toContain('"token_type":"bearer"', '"status":"ok"');
+    expect(app(ActivityLogger::class)->redact(['query' => 'client_secret=s3cr3tvalue&scope=read'])['query'])->toBe('client_secret=[redacted]&scope=read');
+});
+
 test('logger never throws when the table is unavailable', function () {
     Log::spy();
     DB::statement('DROP TABLE gateway_logs');

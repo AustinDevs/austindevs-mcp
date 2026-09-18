@@ -11,16 +11,19 @@ use RuntimeException;
 
 class UpstreamOAuth
 {
+    public function __construct(private ActivityLogger $logger) {}
+
     private function http(): PendingRequest
     {
         return Http::acceptJson()->withoutRedirecting()->connectTimeout(5)->timeout(15);
     }
 
+    /** @return array<string, mixed> */
     private function metadata(string $url): array
     {
         $response = $this->http()->get(RemoteUrl::validate($url));
         if (! $response->successful() || ! is_array($response->json())) {
-            throw new RuntimeException('OAuth metadata could not be loaded.');
+            throw new RuntimeException('OAuth metadata could not be loaded from '.$url.' (HTTP '.$response->status().').');
         }
 
         return $response->json();
@@ -33,29 +36,37 @@ class UpstreamOAuth
         $probe = $this->http()->withHeaders($credentials['headers'] ?? [])->withHeaders(['Accept' => 'application/json, text/event-stream'])->post($connection->url, [
             'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2025-06-18', 'capabilities' => (object) [], 'clientInfo' => ['name' => 'personal-mcp', 'version' => '1.0.0']],
         ]);
-        preg_match('/resource_metadata="([^" ]+)"/', $probe->header('WWW-Authenticate'), $match);
-        try {
-            $resource = $this->metadata($match[1] ?? $origin.'/.well-known/oauth-protected-resource'.(parse_url($connection->url, PHP_URL_PATH) ?: ''));
-        } catch (RuntimeException $exception) {
-            if (isset($match[1])) {
-                throw $exception;
-            }
-            $resource = $this->metadata($origin.'/.well-known/oauth-protected-resource');
-        }
-        $issuer = $resource['authorization_servers'][0] ?? throw new RuntimeException('No OAuth authorization server was advertised.');
-        $issuerOrigin = RemoteUrl::origin($issuer);
-        $issuerPath = rtrim(parse_url($issuer, PHP_URL_PATH) ?: '', '/');
-        $metadata = null;
-        foreach (array_unique([$issuerOrigin.'/.well-known/oauth-authorization-server'.$issuerPath, $issuerOrigin.'/.well-known/openid-configuration'.$issuerPath, rtrim($issuer, '/').'/.well-known/openid-configuration']) as $url) {
+        preg_match('/resource_metadata="?([^",\s]+)"?/', $probe->header('WWW-Authenticate'), $match);
+        $resource = null;
+        $resourceUrl = null;
+        $candidates = array_unique(array_filter([$match[1] ?? null, $origin.'/.well-known/oauth-protected-resource'.(parse_url($connection->url, PHP_URL_PATH) ?: ''), $origin.'/.well-known/oauth-protected-resource']));
+        foreach ($candidates as $candidate) {
             try {
-                $metadata = $this->metadata($url);
+                $resource = $this->metadata($candidate);
+                $resourceUrl = $candidate;
                 break;
             } catch (RuntimeException) {
                 continue;
             }
         }
-        if (! $metadata || ($metadata['issuer'] ?? null) !== $issuer) {
-            throw new RuntimeException('OAuth issuer metadata is missing or does not match.');
+        $issuer = $resource === null ? $origin : ($resource['authorization_servers'][0] ?? throw new RuntimeException('Protected resource metadata at '.$resourceUrl.' lists no authorization server.'));
+        $issuerOrigin = RemoteUrl::origin($issuer);
+        $issuerPath = rtrim(parse_url($issuer, PHP_URL_PATH) ?: '', '/');
+        $metadata = null;
+        $failures = [];
+        foreach (array_unique([$issuerOrigin.'/.well-known/oauth-authorization-server'.$issuerPath, $issuerOrigin.'/.well-known/openid-configuration'.$issuerPath, rtrim($issuer, '/').'/.well-known/openid-configuration']) as $url) {
+            try {
+                $metadata = $this->metadata($url);
+                break;
+            } catch (RuntimeException $exception) {
+                $failures[] = $exception->getMessage();
+            }
+        }
+        if (! $metadata) {
+            throw new RuntimeException('Authorization server metadata for '.$issuer.' could not be loaded. '.implode(' ', $failures));
+        }
+        if (rtrim($metadata['issuer'] ?? '', '/') !== rtrim($issuer, '/')) {
+            throw new RuntimeException('Authorization server metadata issuer "'.($metadata['issuer'] ?? '').'" does not match the advertised issuer "'.$issuer.'".');
         }
         foreach (['authorization_endpoint', 'token_endpoint'] as $key) {
             RemoteUrl::validate($metadata[$key] ?? '');
@@ -64,15 +75,21 @@ class UpstreamOAuth
             throw new RuntimeException('The OAuth server must support PKCE S256.');
         }
         $redirect = route('upstream.callback');
+        $registration = 'manual';
         if (empty($credentials['client_id'])) {
-            $registration = $this->http()->post(RemoteUrl::validate($metadata['registration_endpoint'] ?? ''), [
+            if (empty($metadata['registration_endpoint'])) {
+                throw new RuntimeException('This server does not support dynamic registration. Edit the connection and enter a client ID and secret.');
+            }
+            $registered = $this->http()->post(RemoteUrl::validate($metadata['registration_endpoint']), [
                 'client_name' => config('app.name'), 'redirect_uris' => [$redirect], 'grant_types' => ['authorization_code', 'refresh_token'], 'response_types' => ['code'], 'token_endpoint_auth_method' => 'none',
             ]);
-            if (! $registration->successful() || ! is_string($registration->json('client_id'))) {
-                throw new RuntimeException('Dynamic registration failed. Supply a client ID and secret if required.');
+            if (! $registered->successful() || ! is_string($registered->json('client_id'))) {
+                $this->logger->error('oauth', 'Dynamic registration failed for '.$connection->name, ['url' => $metadata['registration_endpoint'], 'status' => $registered->status(), 'body' => $registered->body()], $connection);
+                throw new RuntimeException('Dynamic registration at '.$metadata['registration_endpoint'].' failed (HTTP '.$registered->status().'). Supply a client ID and secret if required.');
             }
-            $credentials['client_id'] = $registration->json('client_id');
-            $credentials['client_secret'] = $registration->json('client_secret');
+            $credentials['client_id'] = $registered->json('client_id');
+            $credentials['client_secret'] = $registered->json('client_secret');
+            $registration = 'dynamic';
         }
         $credentials['metadata'] = $metadata;
         $connection->update(['credentials' => $credentials]);
@@ -88,6 +105,10 @@ class UpstreamOAuth
         if ($scope !== '') {
             $query['scope'] = $scope;
         }
+        $this->logger->info('oauth', 'Discovered OAuth server for '.$connection->name, [
+            'resource_metadata_url' => $resourceUrl, 'issuer' => $issuer, 'authorization_endpoint' => $metadata['authorization_endpoint'], 'token_endpoint' => $metadata['token_endpoint'],
+            'registration' => $registration, 'scope' => $scope, 'redirect_uri' => $redirect,
+        ], $connection);
 
         return $metadata['authorization_endpoint'].(str_contains($metadata['authorization_endpoint'], '?') ? '&' : '?').http_build_query($query);
     }
@@ -119,6 +140,7 @@ class UpstreamOAuth
         });
     }
 
+    /** @param array<string, string> $params */
     private function token(McpConnection $connection, array $params): void
     {
         $credentials = $connection->credentials;
@@ -134,6 +156,9 @@ class UpstreamOAuth
         }
         $response = $http->post(RemoteUrl::validate($credentials['metadata']['token_endpoint']), $params);
         if (! $response->successful() || ! is_string($response->json('access_token'))) {
+            $this->logger->error('oauth', 'OAuth '.$params['grant_type'].' failed for '.$connection->name, [
+                'grant_type' => $params['grant_type'], 'status' => $response->status(), 'error' => $response->json('error'), 'error_description' => $response->json('error_description'),
+            ], $connection);
             $connection->update(['status' => 'Reconnect required']);
             throw new RuntimeException('OAuth token exchange failed. Reconnect this server.');
         }
@@ -141,5 +166,8 @@ class UpstreamOAuth
         $credentials['refresh_token'] = $response->json('refresh_token') ?? ($credentials['refresh_token'] ?? null);
         $credentials['expires_at'] = $response->json('expires_in') ? now()->addSeconds((int) $response->json('expires_in'))->timestamp : null;
         $connection->update(['credentials' => $credentials, 'status' => 'Connected']);
+        $this->logger->info('oauth', 'OAuth '.$params['grant_type'].' succeeded for '.$connection->name, [
+            'grant_type' => $params['grant_type'], 'expires_in' => $response->json('expires_in'), 'has_refresh_token' => ! empty($credentials['refresh_token']),
+        ], $connection);
     }
 }
