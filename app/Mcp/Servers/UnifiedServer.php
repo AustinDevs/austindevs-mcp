@@ -21,5 +21,8 @@ class UnifiedServer extends Server
             ...McpConnection::query()->where('enabled', true)->orderBy('id')->get()->map(fn (McpConnection $connection): ConnectionTool => new ConnectionTool($connection))->all(),
             GatewayLogsTool::class,
         ];
+
+        $this->defaultPaginationLength = count($this->tools);
+        $this->maxPaginationLength = count($this->tools);
     }
 }
