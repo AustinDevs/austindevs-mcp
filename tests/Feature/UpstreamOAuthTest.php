@@ -200,3 +200,24 @@ test('Google refresh retains the refresh token and can omit the resource paramet
         && $request['refresh_token'] === 'google-refresh' && $request['client_secret'] === 'google-secret'
         && ($sendResource ? $request['resource'] === $connection->url : ! array_key_exists('resource', $request->data())));
 })->with(['resource enabled' => true, 'resource disabled' => false]);
+
+test('an issuer override uses Google metadata without probing the protected resource', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'url' => 'http://google-workspace-mcp:8000/mcp', 'credentials' => [
+        'issuer' => 'https://accounts.google.com', 'client_id' => 'google-client', 'scope' => 'openid email profile',
+    ]]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://accounts.google.com/.well-known/oauth-authorization-server' => Http::response('', 404),
+        'https://accounts.google.com/.well-known/openid-configuration' => Http::response([
+            'issuer' => 'https://accounts.google.com', 'authorization_endpoint' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_endpoint' => 'https://oauth2.googleapis.com/token', 'code_challenge_methods_supported' => ['S256'],
+        ]),
+    ]);
+
+    $this->post(route('upstream.connect', $connection))->assertRedirectContains('https://accounts.google.com/o/oauth2/v2/auth');
+
+    Http::assertSentCount(2);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'google-workspace-mcp'));
+    expect($connection->fresh()->credentials['metadata']['issuer'])->toBe('https://accounts.google.com');
+});

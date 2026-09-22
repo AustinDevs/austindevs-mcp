@@ -56,6 +56,7 @@ class McpConnectionResource extends Resource
             Select::make('auth_type')->label('Authentication')->options(['none' => 'None / custom headers', 'oauth' => 'OAuth (automatic discovery)', 'bearer' => 'Bearer token'])->default('oauth')->required()->live(),
             TextInput::make('credentials.client_id')->label('OAuth client ID')->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText(fn (): string => 'Leave blank for dynamic registration. For manual registration, use callback URL: '.route('upstream.callback')),
             TextInput::make('credentials.client_secret')->label('OAuth client secret')->password()->revealable()->visible(fn (Get $get): bool => $get('auth_type') === 'oauth'),
+            TextInput::make('credentials.issuer')->label('OAuth issuer override (optional)')->url()->maxLength(2048)->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('Use only when server discovery is unavailable. For Google Workspace: https://accounts.google.com. Changing this requires reconnecting.'),
             TextInput::make('credentials.scope')->label('OAuth scopes (optional)')->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('Space-separated; leave blank to use advertised scopes.'),
             KeyValue::make('credentials.authorize_params')->label('Additional authorization parameters')->keyLabel('Parameter')->valueLabel('Value')->default([])->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('For Google, use access_type=offline and prompt=consent select_account. Add login_hint to suggest an account. Standard OAuth parameters cannot be overridden.')->columnSpanFull(),
             Toggle::make('credentials.send_resource')->label('Send resource parameter')->default(true)->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('Include the MCP URL in authorization and token requests. Disable for providers that do not accept it.'),
@@ -81,7 +82,7 @@ class McpConnectionResource extends Resource
                 ->url(fn (McpConnection $record): string => route('upstream.connect', $record))->postToUrl(),
             EditAction::make()
                 ->mutateRecordDataUsing(function (array $data, McpConnection $record): array {
-                    $data['credentials'] = Arr::only($record->credentials ?? [], ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'bearer_token', 'headers']);
+                    $data['credentials'] = Arr::only($record->credentials ?? [], ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'issuer', 'bearer_token', 'headers']);
                     $data['credentials'] += ['authorize_params' => [], 'send_resource' => true];
 
                     return $data;

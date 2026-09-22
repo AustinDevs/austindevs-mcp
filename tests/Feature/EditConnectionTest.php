@@ -119,3 +119,20 @@ test('dashboard permits multiple Google accounts at the same MCP URL', function 
         'authorize_params' => ['access_type' => 'offline'], 'send_resource' => false,
     ]);
 });
+
+test('changing the issuer invalidates old tokens and preserves the override in the form', function () {
+    editOwner();
+    $connection = oauthConnection();
+    Http::preventStrayRequests();
+
+    Livewire::test(ManageMcpConnections::class)->callAction(TestAction::make('edit')->table($connection), data: [
+        'name' => 'Google', 'url' => $connection->url, 'auth_type' => 'oauth',
+        'credentials' => ['client_id' => 'cid', 'issuer' => 'https://accounts.google.com'],
+    ])->assertHasNoActionErrors();
+
+    expect($connection->fresh()->credentials)->toHaveKey('issuer', 'https://accounts.google.com')->not->toHaveKeys(['access_token', 'refresh_token', 'metadata']);
+    expect($connection->fresh()->status)->toBe('Authorization required');
+    Livewire::test(ManageMcpConnections::class)->mountAction(TestAction::make('edit')->table($connection))
+        ->assertSchemaStateSet(['credentials.issuer' => 'https://accounts.google.com']);
+    Http::assertNothingSent();
+});

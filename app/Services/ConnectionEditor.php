@@ -7,7 +7,7 @@ use Illuminate\Support\Arr;
 
 class ConnectionEditor
 {
-    private const FORM_CREDENTIAL_KEYS = ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'bearer_token', 'headers'];
+    private const FORM_CREDENTIAL_KEYS = ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'issuer', 'bearer_token', 'headers'];
 
     private const SESSION_CREDENTIAL_KEYS = ['access_token', 'refresh_token', 'expires_at', 'metadata'];
 
@@ -30,7 +30,7 @@ class ConnectionEditor
             }
         }
         $attributes = Arr::only($data, ['name', 'url', 'auth_type']);
-        if ($data['url'] !== $connection->url || $data['auth_type'] !== $connection->auth_type) {
+        if ($data['url'] !== $connection->url || $data['auth_type'] !== $connection->auth_type || ($credentials['issuer'] ?? null) !== ($connection->credentials['issuer'] ?? null)) {
             $credentials = Arr::except($credentials, self::SESSION_CREDENTIAL_KEYS);
             $attributes['status'] = $data['auth_type'] === 'oauth' ? 'Authorization required' : 'Not checked';
         }

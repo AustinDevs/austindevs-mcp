@@ -33,24 +33,27 @@ class UpstreamOAuth
     public function authorize(McpConnection $connection): string
     {
         $credentials = $connection->credentials ?? [];
-        $origin = RemoteUrl::origin($connection->url);
-        $probe = $this->http()->withHeaders($credentials['headers'] ?? [])->withHeaders(['Accept' => 'application/json, text/event-stream'])->post($connection->url, [
-            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2025-06-18', 'capabilities' => (object) [], 'clientInfo' => ['name' => 'personal-mcp', 'version' => '1.0.0']],
-        ]);
-        preg_match('/resource_metadata="?([^",\s]+)"?/', $probe->header('WWW-Authenticate'), $match);
         $resource = null;
         $resourceUrl = null;
-        $candidates = array_unique(array_filter([$match[1] ?? null, $origin.'/.well-known/oauth-protected-resource'.(parse_url($connection->url, PHP_URL_PATH) ?: ''), $origin.'/.well-known/oauth-protected-resource']));
-        foreach ($candidates as $candidate) {
-            try {
-                $resource = $this->metadata($candidate);
-                $resourceUrl = $candidate;
-                break;
-            } catch (RuntimeException) {
-                continue;
+        $issuer = $credentials['issuer'] ?? null;
+        if (! filled($issuer)) {
+            $origin = RemoteUrl::origin($connection->url);
+            $probe = $this->http()->withHeaders($credentials['headers'] ?? [])->withHeaders(['Accept' => 'application/json, text/event-stream'])->post($connection->url, [
+                'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2025-06-18', 'capabilities' => (object) [], 'clientInfo' => ['name' => 'personal-mcp', 'version' => '1.0.0']],
+            ]);
+            preg_match('/resource_metadata="?([^",\s]+)"?/', $probe->header('WWW-Authenticate'), $match);
+            $candidates = array_unique(array_filter([$match[1] ?? null, $origin.'/.well-known/oauth-protected-resource'.(parse_url($connection->url, PHP_URL_PATH) ?: ''), $origin.'/.well-known/oauth-protected-resource']));
+            foreach ($candidates as $candidate) {
+                try {
+                    $resource = $this->metadata($candidate);
+                    $resourceUrl = $candidate;
+                    break;
+                } catch (RuntimeException) {
+                    continue;
+                }
             }
+            $issuer = $resource === null ? $origin : ($resource['authorization_servers'][0] ?? throw new RuntimeException('Protected resource metadata at '.$resourceUrl.' lists no authorization server.'));
         }
-        $issuer = $resource === null ? $origin : ($resource['authorization_servers'][0] ?? throw new RuntimeException('Protected resource metadata at '.$resourceUrl.' lists no authorization server.'));
         $issuerOrigin = RemoteUrl::origin($issuer);
         $issuerPath = rtrim(parse_url($issuer, PHP_URL_PATH) ?: '', '/');
         $metadata = null;
