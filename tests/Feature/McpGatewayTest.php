@@ -104,6 +104,25 @@ test('wrapper discovers tools and forwards credentials and arguments without gat
     expect($connection->toArray())->not->toHaveKey('credentials');
 });
 
+test('Spark PDF export passes an embedded PDF through to the chat client', function () {
+    gatewayOwner();
+    $connection = McpConnection::factory()->create(['name' => 'Spark Email']);
+    $pdf = base64_encode('%PDF-1.4 test');
+    fakeRemoteMcp(['content' => [
+        ['type' => 'text', 'text' => 'Spark email PDF'],
+        ['type' => 'resource', 'resource' => ['uri' => 'spark://email-pdf/test.pdf', 'mimeType' => 'application/pdf', 'blob' => $pdf]],
+    ]]);
+
+    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/call', [
+        'name' => $connection->toolName(),
+        'arguments' => ['tool_name' => 'email_pdf', 'arguments' => '{"message_id":"test"}'],
+    ]))->assertOk()
+        ->assertJsonPath('result.content.0.text', 'Spark email PDF')
+        ->assertJsonPath('result.content.1.type', 'resource')
+        ->assertJsonPath('result.content.1.resource.mimeType', 'application/pdf')
+        ->assertJsonPath('result.content.1.resource.blob', $pdf);
+});
+
 test('wrapper rejects non-object arguments and reports upstream errors without retrying', function () {
     gatewayOwner();
     $connection = McpConnection::factory()->create();

@@ -2,12 +2,14 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Content\EmbeddedResourceResponse;
 use App\Models\McpConnection;
 use App\Services\ActivityLogger;
 use App\Services\RemoteMcpClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
+use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Tool;
 use Throwable;
 
@@ -38,7 +40,7 @@ class ConnectionTool extends Tool
         ];
     }
 
-    public function handle(Request $request): Response
+    public function handle(Request $request): Response|ResponseFactory
     {
         $validated = $request->validate(['tool_name' => ['required', 'string'], 'arguments' => ['sometimes', 'string', 'json']]);
         $arguments = json_decode($validated['arguments'] ?? '{}');
@@ -57,7 +59,27 @@ class ConnectionTool extends Tool
                 'tool_name' => $validated['tool_name'], 'argument_bytes' => strlen($validated['arguments'] ?? '{}'), 'result_bytes' => strlen($encoded), 'is_error' => ! empty($result['isError']),
             ], $this->connection, (int) ((hrtime(true) - $started) / 1_000_000));
 
-            return ! empty($result['isError']) ? Response::error($encoded) : Response::json($result);
+            if (! empty($result['isError'])) {
+                return Response::error($encoded);
+            }
+
+            if ($validated['tool_name'] === 'email_pdf') {
+                $pdf = collect($result['content'] ?? [])->first(fn (array $block): bool => ($block['type'] ?? null) === 'resource'
+                    && ($block['resource']['mimeType'] ?? null) === 'application/pdf');
+                $resource = $pdf['resource'] ?? null;
+
+                if (is_array($resource) && isset($resource['uri'], $resource['mimeType'], $resource['blob'])
+                    && is_string($resource['uri']) && is_string($resource['blob'])) {
+                    $summary = collect($result['content'])->first(fn (array $block): bool => ($block['type'] ?? null) === 'text');
+
+                    return Response::make([
+                        Response::text($summary['text'] ?? 'Spark email PDF'),
+                        EmbeddedResourceResponse::fromResource($resource),
+                    ]);
+                }
+            }
+
+            return Response::json($result);
         } catch (Throwable $exception) {
             $logger->error('tool_call', 'Tool call failed on '.$this->connection->name, [
                 'tool_name' => $validated['tool_name'], 'exception' => $exception::class, 'error' => $exception->getMessage(),
