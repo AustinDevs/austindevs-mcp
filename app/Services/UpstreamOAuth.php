@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\McpConnection;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -99,12 +100,16 @@ class UpstreamOAuth
         session()->put('upstream-states.'.$state, $connection->id);
         $query = [
             'client_id' => $credentials['client_id'], 'redirect_uri' => $redirect, 'response_type' => 'code', 'state' => $state,
-            'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='), 'code_challenge_method' => 'S256', 'resource' => $connection->url,
+            'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='), 'code_challenge_method' => 'S256',
         ];
+        if ($credentials['send_resource'] ?? true) {
+            $query['resource'] = $connection->url;
+        }
         $scope = $credentials['scope'] ?? implode(' ', $resource['scopes_supported'] ?? []);
         if ($scope !== '') {
             $query['scope'] = $scope;
         }
+        $query += Arr::except($credentials['authorize_params'] ?? [], ['client_id', 'redirect_uri', 'response_type', 'state', 'code_challenge', 'code_challenge_method', 'resource', 'scope']);
         $this->logger->info('oauth', 'Discovered OAuth server for '.$connection->name, [
             'resource_metadata_url' => $resourceUrl, 'issuer' => $issuer, 'authorization_endpoint' => $metadata['authorization_endpoint'], 'token_endpoint' => $metadata['token_endpoint'],
             'registration' => $registration, 'scope' => $scope, 'redirect_uri' => $redirect,
@@ -144,7 +149,10 @@ class UpstreamOAuth
     private function token(McpConnection $connection, array $params): void
     {
         $credentials = $connection->credentials;
-        $params += ['client_id' => $credentials['client_id'], 'resource' => $connection->url];
+        $params += ['client_id' => $credentials['client_id']];
+        if ($credentials['send_resource'] ?? true) {
+            $params['resource'] = $connection->url;
+        }
         $http = $this->http()->asForm();
         if (! empty($credentials['client_secret'])) {
             $methods = $credentials['metadata']['token_endpoint_auth_methods_supported'] ?? ['client_secret_basic'];

@@ -150,3 +150,53 @@ test('callback receipt and decline are logged and the notification carries the r
     $this->get(route('upstream.callback').'?state='.str_repeat('b', 64).'&code=x')->assertForbidden();
     expect(GatewayLog::where('level', 'warning')->sole()->message)->toBe('OAuth callback rejected');
 });
+
+test('additional authorize parameters preserve the bound OAuth request', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'client_id' => 'manual', 'scope' => 'openid email profile', 'send_resource' => false,
+        'authorize_params' => [
+            'access_type' => 'offline', 'prompt' => 'consent select_account', 'login_hint' => 'kevin@example.com',
+            'client_id' => 'wrong', 'redirect_uri' => 'https://wrong.example.com', 'state' => 'wrong',
+            'code_challenge' => 'wrong', 'code_challenge_method' => 'plain', 'response_type' => 'token',
+            'resource' => 'https://wrong.example.com', 'scope' => 'wrong',
+        ],
+    ]]);
+    fakeUpstreamOAuth();
+
+    $response = $this->post(route('upstream.connect', $connection))->assertRedirect();
+
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+    $session = session('upstream.'.$connection->id);
+    expect($query)->toMatchArray([
+        'client_id' => 'manual', 'redirect_uri' => route('upstream.callback'), 'state' => $session['state'],
+        'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $session['verifier'], true)), '+/', '-_'), '='),
+        'code_challenge_method' => 'S256', 'response_type' => 'code', 'scope' => 'openid email profile',
+        'access_type' => 'offline', 'prompt' => 'consent select_account', 'login_hint' => 'kevin@example.com',
+    ])->not->toHaveKey('resource');
+    $this->get(route('upstream.callback').'?'.http_build_query(['state' => $query['state'], 'code' => 'code']))->assertRedirect();
+    Http::assertSent(fn ($request) => $request->url() === 'https://auth.example.com/token'
+        && $request['grant_type'] === 'authorization_code' && ! array_key_exists('resource', $request->data()));
+});
+
+test('Google refresh retains the refresh token and can omit the resource parameter', function (bool $sendResource) {
+    $this->freezeTime();
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'client_id' => 'google-client', 'client_secret' => 'google-secret', 'send_resource' => $sendResource,
+        'access_token' => 'expired', 'refresh_token' => 'google-refresh', 'expires_at' => now()->subMinute()->timestamp,
+        'metadata' => ['token_endpoint' => 'https://oauth2.googleapis.com/token', 'token_endpoint_auth_methods_supported' => ['client_secret_post']],
+    ]]);
+    Http::preventStrayRequests();
+    Http::fake(['https://oauth2.googleapis.com/token' => Http::response([
+        'access_token' => 'google-access', 'expires_in' => 3599, 'scope' => 'openid email profile', 'token_type' => 'Bearer',
+    ])]);
+
+    app(UpstreamOAuth::class)->refresh($connection);
+
+    expect($connection->fresh()->credentials)->toMatchArray([
+        'access_token' => 'google-access', 'refresh_token' => 'google-refresh', 'expires_at' => now()->addSeconds(3599)->timestamp,
+    ]);
+    Http::assertSent(fn ($request) => $request['grant_type'] === 'refresh_token'
+        && $request['refresh_token'] === 'google-refresh' && $request['client_secret'] === 'google-secret'
+        && ($sendResource ? $request['resource'] === $connection->url : ! array_key_exists('resource', $request->data())));
+})->with(['resource enabled' => true, 'resource disabled' => false]);

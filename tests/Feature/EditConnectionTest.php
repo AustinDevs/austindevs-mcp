@@ -56,7 +56,7 @@ test('changing the URL resets OAuth session data and refetches the favicon', fun
     ])->assertHasNoActionErrors();
     $fresh = $connection->fresh();
     expect($fresh->url)->toBe('https://other.example.com/mcp')->and($fresh->status)->toBe('Authorization required')->and($fresh->favicon)->toBeNull();
-    expect($fresh->credentials)->toBe(['client_id' => 'cid', 'client_secret' => 'csecret', 'scope' => 'read', 'headers' => ['X-A' => '1']]);
+    expect($fresh->credentials)->toBe(['client_id' => 'cid', 'client_secret' => 'csecret', 'scope' => 'read', 'headers' => ['X-A' => '1'], 'send_resource' => true]);
     Http::assertSentCount(2);
 });
 
@@ -77,4 +77,45 @@ test('editing validates the URL', function () {
     Http::preventStrayRequests();
     Livewire::test(ManageMcpConnections::class)->callAction(TestAction::make('edit')->table($connection), data: ['name' => 'X', 'url' => 'file:///etc/passwd', 'auth_type' => 'none'])->assertHasActionErrors(['url']);
     Http::assertNothingSent();
+});
+
+test('OAuth authorization settings survive editing without replacing tokens', function () {
+    editOwner();
+    $connection = oauthConnection();
+    Http::preventStrayRequests();
+    $params = ['access_type' => 'offline', 'prompt' => 'consent select_account', 'login_hint' => 'kevin@example.com'];
+
+    Livewire::test(ManageMcpConnections::class)->callAction(TestAction::make('edit')->table($connection), data: [
+        'name' => 'Google', 'url' => $connection->url, 'auth_type' => 'oauth',
+        'credentials' => ['client_id' => 'cid', 'client_secret' => 'csecret', 'scope' => 'openid email profile', 'authorize_params' => $params, 'send_resource' => false],
+    ])->assertHasNoActionErrors();
+
+    expect($connection->fresh()->credentials)->toMatchArray([
+        'authorize_params' => $params, 'send_resource' => false, 'scope' => 'openid email profile',
+        'access_token' => 'at', 'refresh_token' => 'rt', 'expires_at' => 123, 'metadata' => ['issuer' => 'https://auth.example.com'],
+    ]);
+    Livewire::test(ManageMcpConnections::class)->mountAction(TestAction::make('edit')->table($connection))
+        ->assertSchemaStateSet(['credentials.authorize_params' => $params, 'credentials.send_resource' => false]);
+    Http::assertNothingSent();
+});
+
+test('dashboard permits multiple Google accounts at the same MCP URL', function () {
+    editOwner();
+    $url = 'http://google-workspace-mcp:8000/mcp';
+    McpConnection::factory()->create(['name' => 'google_personal', 'url' => $url]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'http://google-workspace-mcp:8000/' => Http::response('', 404),
+        'http://google-workspace-mcp:8000/favicon.ico' => Http::response('', 404),
+    ]);
+
+    Livewire::test(ManageMcpConnections::class)->callAction('create', data: [
+        'name' => 'google_austindevs', 'url' => $url, 'auth_type' => 'oauth',
+        'credentials' => ['client_id' => 'google-client', 'scope' => 'openid email profile', 'authorize_params' => ['access_type' => 'offline'], 'send_resource' => false],
+    ])->assertHasNoActionErrors();
+
+    expect(McpConnection::where('url', $url)->count())->toBe(2);
+    expect(McpConnection::where('name', 'google_austindevs')->sole()->credentials)->toMatchArray([
+        'authorize_params' => ['access_type' => 'offline'], 'send_resource' => false,
+    ]);
 });

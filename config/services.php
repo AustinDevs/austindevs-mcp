@@ -2,6 +2,13 @@
 
 return [
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => '/auth/google/callback',
+        'guzzle' => ['connect_timeout' => 5, 'timeout' => 15],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

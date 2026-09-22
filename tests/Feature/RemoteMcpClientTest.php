@@ -42,3 +42,20 @@ test('disabling a connection prevents calls through an already constructed clien
     expect(fn () => $client->call('write', []))->toThrow(RuntimeException::class, 'This connection is disabled.');
     Http::assertNothingSent();
 });
+
+test('connections sharing a Workspace URL send only their own Google token', function () {
+    $url = 'http://google-workspace-mcp:8000/mcp';
+    $personal = McpConnection::factory()->create(['name' => 'google_personal', 'url' => $url, 'auth_type' => 'oauth', 'credentials' => ['access_token' => 'personal-token']]);
+    $work = McpConnection::factory()->create(['name' => 'google_austindevs', 'url' => $url, 'auth_type' => 'oauth', 'credentials' => ['access_token' => 'work-token']]);
+    Http::preventStrayRequests();
+    Http::fake([$url => Http::response(['id' => 1, 'result' => ['content' => []]])]);
+
+    (new RemoteMcpClient($personal))->call('personal_search', []);
+    (new RemoteMcpClient($work))->call('work_search', []);
+
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request) => $request['params']->name === 'personal_search' && $request->hasHeader('Authorization', 'Bearer personal-token'));
+    Http::assertSent(fn ($request) => $request['params']->name === 'work_search' && $request->hasHeader('Authorization', 'Bearer work-token'));
+    expect($personal->fresh()->credentials['access_token'])->toBe('personal-token');
+    expect($work->fresh()->credentials['access_token'])->toBe('work-token');
+});

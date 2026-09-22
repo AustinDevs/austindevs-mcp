@@ -47,6 +47,7 @@ class ServiceIcon
         'bitbucket' => ['bitbucket'],
         'slack' => ['slack'],
         'sentry' => ['sentry'],
+        'bugsnag' => ['bugsnag'],
         'notion' => ['notion'],
         'linear' => ['linear'],
         'stripe' => ['stripe'],

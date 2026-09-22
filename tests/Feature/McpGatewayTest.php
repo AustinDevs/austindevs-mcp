@@ -2,6 +2,7 @@
 
 use App\Filament\Pages\ClientAccess;
 use App\Filament\Resources\McpConnections\Pages\ManageMcpConnections;
+use App\Models\GatewayToken;
 use App\Models\McpConnection;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
@@ -183,7 +184,7 @@ test('dashboard and upstream OAuth routes reject other users', function () {
     gatewayOwner();
     $other = User::factory()->create();
     $connection = McpConnection::factory()->create(['auth_type' => 'oauth']);
-    $this->actingAs($other)->get('/app/mcp-connections')->assertForbidden();
+    $this->actingAs($other)->get('/mcp-connections')->assertForbidden();
     $this->post(route('upstream.connect', $connection))->assertForbidden();
 });
 
@@ -206,7 +207,7 @@ test('client access page generates and revokes a static token', function () {
     $this->actingAs($owner);
     Filament::setCurrentPanel(Filament::getPanel('app'));
     Livewire::test(ClientAccess::class)->callAction('token', data: ['header' => 'X-MCP-Token'])->assertHasNoActionErrors();
-    expect($owner->fresh()->gateway_header)->toBe('X-MCP-Token');
+    expect(GatewayToken::where('user_id', $owner->id)->sole()->header)->toBe('X-MCP-Token');
     Livewire::test(ClientAccess::class)->callAction('revoke')->assertHasNoActionErrors();
     expect($owner->fresh()->gateway_token_hash)->toBeNull();
 });

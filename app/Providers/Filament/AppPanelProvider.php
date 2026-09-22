@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Resources\McpConnections\McpConnectionResource;
+use App\Http\Controllers\GoogleLoginController;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -24,10 +25,14 @@ class AppPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('app')
-            ->brandName('Personal MCP')
+            ->brandName('Austin Devs MCP')
+            ->brandLogo(fn () => view('filament.brand'))
+            ->font('Jost')
+            ->viteTheme('resources/css/app.css')
+            ->globalSearch(false)
             ->homeUrl(fn () => McpConnectionResource::getUrl())
-            ->path('app')
-            ->login()
+            ->path('')
+            ->login([GoogleLoginController::class, 'redirect'])
             ->colors([
                 'primary' => Color::Amber,
             ])

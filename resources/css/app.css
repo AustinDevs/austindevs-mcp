@@ -1,9 +1,19 @@
-@import 'tailwindcss';
+@import '../../vendor/filament/filament/resources/css/theme.css';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
+@source '../views/filament/**/*.blade.php';
+@source '../../app/Filament/**/*.php';
 
-@theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
-}
+.ad-brand { display: inline-flex; align-items: center; gap: .65rem; font-family: Jost, sans-serif; font-size: 1.1rem; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; }
+.ad-brand svg { width: 2.3rem; height: 1rem; overflow: visible; fill: none; stroke: currentColor; stroke-width: 5.4; }
+.ad-brand-label { font-size: .65rem; letter-spacing: .12em; opacity: .6; }
+.ad-copy { @apply text-sm leading-6 text-gray-600 dark:text-gray-400; }
+.ad-endpoint { @apply flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-950; }
+.ad-endpoint code { @apply break-all text-sm font-medium text-gray-950 dark:text-white; }
+.ad-methods { @apply grid gap-6 md:grid-cols-2; }
+.ad-method { @apply flex flex-col items-start gap-3; }
+.ad-method h3 { @apply text-base font-semibold text-gray-950 dark:text-white; }
+.ad-record { @apply flex flex-wrap items-center justify-between gap-4 py-4; }
+.ad-record + .ad-record { @apply border-t border-gray-200 dark:border-gray-700; }
+.ad-record-meta { @apply mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400; }
+.ad-record-actions { @apply flex items-center gap-3; }
+.ad-secret { @apply overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-gray-950 p-4 font-mono text-sm leading-6 text-gray-100; }

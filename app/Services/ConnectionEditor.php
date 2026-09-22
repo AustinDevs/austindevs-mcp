@@ -7,7 +7,7 @@ use Illuminate\Support\Arr;
 
 class ConnectionEditor
 {
-    private const FORM_CREDENTIAL_KEYS = ['client_id', 'client_secret', 'scope', 'bearer_token', 'headers'];
+    private const FORM_CREDENTIAL_KEYS = ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'bearer_token', 'headers'];
 
     private const SESSION_CREDENTIAL_KEYS = ['access_token', 'refresh_token', 'expires_at', 'metadata'];
 

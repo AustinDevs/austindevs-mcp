@@ -26,7 +26,7 @@ test('the activity log page lists filters and shows details', function () {
     $connection = McpConnection::factory()->create(['name' => 'Sentry']);
     $error = GatewayLog::factory()->create(['level' => 'error', 'category' => 'upstream', 'message' => 'Upstream returned HTTP 500', 'mcp_connection_id' => $connection->id, 'context' => ['status' => 500, 'body' => 'upstream exploded']]);
     $info = GatewayLog::factory()->create(['level' => 'info', 'category' => 'oauth', 'message' => 'Discovered OAuth server']);
-    $this->get('/app/gateway-logs')->assertOk()->assertSee('Activity log');
+    $this->get('/gateway-logs')->assertOk()->assertSee('Activity log');
     Livewire::test(ListGatewayLogs::class)
         ->assertCanSeeTableRecords([$error, $info])
         ->filterTable('level', 'error')->assertCanSeeTableRecords([$error])->assertCanNotSeeTableRecords([$info])
@@ -46,5 +46,5 @@ test('the activity log can be cleared and is read only', function () {
 
 test('other users cannot open the activity log', function () {
     logPageOwner();
-    $this->actingAs(User::factory()->create())->get('/app/gateway-logs')->assertForbidden();
+    $this->actingAs(User::factory()->create())->get('/gateway-logs')->assertForbidden();
 });

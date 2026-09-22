@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\GatewayToken;
 use App\Models\User;
 use App\Services\ActivityLogger;
 use Closure;
@@ -23,6 +24,19 @@ class AuthenticateGateway
             $request->setUserResolver(fn (): User => $owner);
 
             return $next($request);
+        }
+        if ($owner) {
+            $tokens = GatewayToken::query()->where('user_id', $owner->id)->whereNull('revoked_at')->get();
+            foreach ($tokens as $storedToken) {
+                $candidate = $storedToken->header ? $request->header($storedToken->header) : $request->bearerToken();
+                if (is_string($candidate) && hash_equals($storedToken->token_hash, hash('sha256', $candidate))) {
+                    $storedToken->update(['last_used_at' => now()]);
+                    Auth::setUser($owner);
+                    $request->setUserResolver(fn (): User => $owner);
+
+                    return $next($request);
+                }
+            }
         }
         $user = Auth::guard('api')->user();
         if (! $user || ! $user->isOwner()) {

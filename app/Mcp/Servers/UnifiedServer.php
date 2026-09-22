@@ -9,7 +9,7 @@ use Laravel\Mcp\Server;
 
 class UnifiedServer extends Server
 {
-    protected string $name = 'Personal MCP';
+    protected string $name = 'Austin Devs MCP';
 
     protected string $version = '1.0.0';
 

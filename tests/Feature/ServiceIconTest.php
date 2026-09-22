@@ -9,6 +9,7 @@ uses(LazilyRefreshDatabase::class);
 test('brand icons resolve from the connection name', function (string $name, string $expected) {
     expect(app(ServiceIcon::class)->resolve($name, 'https://example.com/mcp'))->toBe(url($expected));
 })->with([
+    ['Bugsnag (Paycove)', '/img/services/bugsnag.svg'],
     ['Asana (DineUp)', '/img/services/asana.svg'],
     ['Actual Budget MCP', '/img/services/actual-budget.svg'],
     ['Spark Email MCP', '/img/services/spark.png'],
