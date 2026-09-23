@@ -148,8 +148,7 @@ test('connection list shows successful refresh history and the next refresh inst
     McpConnection::factory()->create(['enabled' => false, 'auth_type' => 'oauth']);
 
     Livewire::test(ManageMcpConnections::class)
-        ->assertSee('Last successful refresh')->assertSee('Next refresh due')
-        ->assertSee('2 hours ago')->assertSee('30 minutes from now')
+        ->assertSee('Token refresh')->assertSee('2 hours ago / 30 minutes from now')
         ->assertSee('Not recorded yet')->assertSee('Next scheduled check')->assertSee('Paused')
         ->assertDontSee('Provider does not disclose expiry')->assertDontSee('Expiry not provided')
         ->assertDontSee('access-secret')->assertDontSee('refresh-secret');
