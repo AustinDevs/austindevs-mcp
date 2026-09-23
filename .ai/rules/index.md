@@ -8,3 +8,4 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Http/Controllers/GoogleLoginController.php | .ai/rules/controllers.md |
 | app/Filament/Pages/ClientAccess.php | .ai/rules/pages.md |
 | app/Mcp/Servers/** | .ai/rules/servers.md |
+| app/Services/UpstreamOAuth.php | .ai/rules/services.md |

@@ -24,7 +24,7 @@ function oauthConnection(): McpConnection
 {
     return McpConnection::factory()->create(['name' => 'Old', 'auth_type' => 'oauth', 'status' => 'Connected', 'favicon' => 'data:old', 'credentials' => [
         'client_id' => 'cid', 'client_secret' => 'csecret', 'scope' => 'read', 'headers' => ['X-A' => '1'],
-        'access_token' => 'at', 'refresh_token' => 'rt', 'expires_at' => 123, 'metadata' => ['issuer' => 'https://auth.example.com'],
+        'access_token' => 'at', 'refresh_token' => 'rt', 'expires_at' => 123, 'refresh_token_expires_at' => 456, 'last_token_refresh_at' => 100, 'metadata' => ['issuer' => 'https://auth.example.com'],
     ]]);
 }
 
@@ -92,7 +92,7 @@ test('OAuth authorization settings survive editing without replacing tokens', fu
 
     expect($connection->fresh()->credentials)->toMatchArray([
         'authorize_params' => $params, 'send_resource' => false, 'scope' => 'openid email profile',
-        'access_token' => 'at', 'refresh_token' => 'rt', 'expires_at' => 123, 'metadata' => ['issuer' => 'https://auth.example.com'],
+        'access_token' => 'at', 'refresh_token' => 'rt', 'expires_at' => 123, 'refresh_token_expires_at' => 456, 'last_token_refresh_at' => 100, 'metadata' => ['issuer' => 'https://auth.example.com'],
     ]);
     Livewire::test(ManageMcpConnections::class)->mountAction(TestAction::make('edit')->table($connection))
         ->assertSchemaStateSet(['credentials.authorize_params' => $params, 'credentials.send_resource' => false]);
@@ -135,4 +135,19 @@ test('changing the issuer invalidates old tokens and preserves the override in t
     Livewire::test(ManageMcpConnections::class)->mountAction(TestAction::make('edit')->table($connection))
         ->assertSchemaStateSet(['credentials.issuer' => 'https://accounts.google.com']);
     Http::assertNothingSent();
+});
+
+test('connection list shows refresh token days remaining without confusing unknown expiry with unlimited access', function () {
+    $this->travelTo(now()->setDate(2026, 9, 23)->startOfDay());
+    editOwner();
+    $known = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'known-secret', 'refresh_token_expires_at' => now()->addDays(12)->timestamp]]);
+    $google = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'google-secret', 'last_token_refresh_at' => now()->timestamp, 'metadata' => ['issuer' => 'https://accounts.google.com']]]);
+    $unknown = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'unknown-secret']]);
+    $expired = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'expired-secret', 'refresh_token_expires_at' => now()->subMinute()->timestamp]]);
+    $disabled = McpConnection::factory()->create(['enabled' => false, 'auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'paused-secret']]);
+
+    Livewire::test(ManageMcpConnections::class)
+        ->assertSee('12 days left')->assertSee('≈181 days left')->assertSee('Google inactivity estimate')
+        ->assertSee('Expiry not provided')->assertSee('Expired')->assertSee('Auto-refresh paused')
+        ->assertDontSee('known-secret')->assertDontSee('google-secret');
 });

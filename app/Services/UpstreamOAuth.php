@@ -126,19 +126,19 @@ class UpstreamOAuth
         $this->token($connection, ['grant_type' => 'authorization_code', 'code' => $code, 'code_verifier' => $verifier, 'redirect_uri' => route('upstream.callback')]);
     }
 
-    public function refresh(McpConnection $connection): void
+    public function refresh(McpConnection $connection, bool $scheduled = false): void
     {
         $credentials = $connection->credentials ?? [];
         if (empty($credentials['access_token'])) {
             throw new RuntimeException('Connect this server with OAuth first.');
         }
-        if (empty($credentials['expires_at']) || $credentials['expires_at'] > now()->addSeconds(30)->timestamp) {
+        if (! $this->refreshDue($connection, $scheduled)) {
             return;
         }
-        Cache::lock('oauth-refresh-'.$connection->id, 30)->block(10, function () use ($connection): void {
+        Cache::lock('oauth-refresh-'.$connection->id, 30)->block(10, function () use ($connection, $scheduled): void {
             $connection->refresh();
             $credentials = $connection->credentials;
-            if (($credentials['expires_at'] ?? PHP_INT_MAX) > now()->addSeconds(30)->timestamp) {
+            if (! $this->refreshDue($connection, $scheduled)) {
                 return;
             }
             if (empty($credentials['refresh_token'])) {
@@ -146,6 +146,28 @@ class UpstreamOAuth
             }
             $this->token($connection, ['grant_type' => 'refresh_token', 'refresh_token' => $credentials['refresh_token']]);
         });
+    }
+
+    private function refreshDue(McpConnection $connection, bool $scheduled): bool
+    {
+        $credentials = $connection->credentials ?? [];
+        if ($scheduled && (! $connection->enabled || $connection->auth_type !== 'oauth'
+            || $connection->status === 'Reconnect required' || empty($credentials['refresh_token'])
+            || empty($credentials['access_token']))) {
+            return false;
+        }
+        if (isset($credentials['expires_at']) && $credentials['expires_at'] <= now()->addSeconds($scheduled ? 300 : 30)->timestamp) {
+            return true;
+        }
+        if (! $scheduled) {
+            return false;
+        }
+        $lastRefresh = $credentials['last_token_refresh_at'] ?? 0;
+
+        return $lastRefresh <= now()->subDays(7)->timestamp
+            || (isset($credentials['refresh_token_expires_at'])
+                && $credentials['refresh_token_expires_at'] <= now()->addDay()->timestamp
+                && $lastRefresh <= now()->subHour()->timestamp);
     }
 
     /** @param array<string, string> $params */
@@ -170,9 +192,21 @@ class UpstreamOAuth
             $this->logger->error('oauth', 'OAuth '.$params['grant_type'].' failed for '.$connection->name, [
                 'grant_type' => $params['grant_type'], 'status' => $response->status(), 'error' => $response->json('error'), 'error_description' => $response->json('error_description'),
             ], $connection);
-            $connection->update(['status' => 'Reconnect required']);
+            if (in_array($response->json('error'), ['invalid_grant', 'invalid_client', 'unauthorized_client'], true)) {
+                $connection->update(['status' => 'Reconnect required']);
+            } else {
+                throw new RuntimeException('OAuth token exchange failed temporarily. Try again later.');
+            }
             throw new RuntimeException('OAuth token exchange failed. Reconnect this server.');
         }
+        $newRefreshToken = $response->json('refresh_token');
+        if (is_string($newRefreshToken) && $newRefreshToken !== ($credentials['refresh_token'] ?? null)) {
+            unset($credentials['refresh_token_expires_at']);
+        }
+        if (is_numeric($response->json('refresh_token_expires_in'))) {
+            $credentials['refresh_token_expires_at'] = now()->addSeconds((int) $response->json('refresh_token_expires_in'))->timestamp;
+        }
+        $credentials['last_token_refresh_at'] = now()->timestamp;
         $credentials['access_token'] = $response->json('access_token');
         $credentials['refresh_token'] = $response->json('refresh_token') ?? ($credentials['refresh_token'] ?? null);
         $credentials['expires_at'] = $response->json('expires_in') ? now()->addSeconds((int) $response->json('expires_in'))->timestamp : null;

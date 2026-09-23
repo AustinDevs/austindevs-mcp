@@ -9,7 +9,7 @@ class ConnectionEditor
 {
     private const FORM_CREDENTIAL_KEYS = ['client_id', 'client_secret', 'scope', 'authorize_params', 'send_resource', 'issuer', 'bearer_token', 'headers'];
 
-    private const SESSION_CREDENTIAL_KEYS = ['access_token', 'refresh_token', 'expires_at', 'metadata'];
+    private const SESSION_CREDENTIAL_KEYS = ['access_token', 'refresh_token', 'expires_at', 'refresh_token_expires_at', 'last_token_refresh_at', 'metadata'];
 
     public function __construct(private FaviconFetcher $favicons) {}
 
