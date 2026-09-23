@@ -150,24 +150,12 @@ class UpstreamOAuth
 
     private function refreshDue(McpConnection $connection, bool $scheduled): bool
     {
-        $credentials = $connection->credentials ?? [];
-        if ($scheduled && (! $connection->enabled || $connection->auth_type !== 'oauth'
-            || $connection->status === 'Reconnect required' || empty($credentials['refresh_token'])
-            || empty($credentials['access_token']))) {
-            return false;
+        if ($scheduled) {
+            return $connection->nextTokenRefreshAt()?->lte(now()) ?? false;
         }
-        if (isset($credentials['expires_at']) && $credentials['expires_at'] <= now()->addSeconds($scheduled ? 300 : 30)->timestamp) {
-            return true;
-        }
-        if (! $scheduled) {
-            return false;
-        }
-        $lastRefresh = $credentials['last_token_refresh_at'] ?? 0;
+        $expiresAt = $connection->credentials['expires_at'] ?? null;
 
-        return $lastRefresh <= now()->subDays(7)->timestamp
-            || (isset($credentials['refresh_token_expires_at'])
-                && $credentials['refresh_token_expires_at'] <= now()->addDay()->timestamp
-                && $lastRefresh <= now()->subHour()->timestamp);
+        return $expiresAt !== null && $expiresAt <= now()->addSeconds(30)->timestamp;
     }
 
     /** @param array<string, string> $params */

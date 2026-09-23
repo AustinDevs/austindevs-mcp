@@ -29,55 +29,52 @@ class McpConnection extends Model
         return substr($name !== '' ? $name : 'connection', 0, 64 - strlen($suffix)).$suffix;
     }
 
-    public function refreshTokenDeadline(): ?Carbon
+    public function nextTokenRefreshAt(): ?Carbon
     {
         $credentials = $this->credentials ?? [];
-        if ($this->auth_type !== 'oauth' || empty($credentials['refresh_token'])) {
+        if (! $this->enabled || $this->auth_type !== 'oauth' || $this->status === 'Reconnect required'
+            || empty($credentials['access_token']) || empty($credentials['refresh_token'])) {
             return null;
         }
-        if (isset($credentials['refresh_token_expires_at'])) {
-            return Carbon::createFromTimestamp($credentials['refresh_token_expires_at']);
+        $lastRefresh = $credentials['last_token_refresh_at'] ?? 0;
+        $due = $lastRefresh + 7 * 86400;
+        if (isset($credentials['expires_at'])) {
+            $due = min($due, $credentials['expires_at'] - 300);
         }
-        if (rtrim($credentials['metadata']['issuer'] ?? '', '/') === 'https://accounts.google.com'
-            && isset($credentials['last_token_refresh_at'])) {
-            return Carbon::createFromTimestamp($credentials['last_token_refresh_at'])->addMonthsNoOverflow(6);
+        if (isset($credentials['refresh_token_expires_at'])) {
+            $due = min($due, max($credentials['refresh_token_expires_at'] - 86400, $lastRefresh + 3600));
         }
 
-        return null;
+        return Carbon::createFromTimestamp($due);
     }
 
-    public function refreshTokenLifetime(): string
+    public function lastTokenRefreshLabel(): string
     {
         if ($this->auth_type !== 'oauth') {
             return 'Not applicable';
         }
+        $timestamp = $this->credentials['last_token_refresh_at'] ?? null;
+
+        return $timestamp ? Carbon::createFromTimestamp($timestamp)->diffForHumans() : 'Not recorded yet';
+    }
+
+    public function nextTokenRefreshLabel(): string
+    {
+        if ($this->auth_type !== 'oauth') {
+            return 'Not applicable';
+        }
+        if (! $this->enabled) {
+            return 'Paused';
+        }
         if ($this->status === 'Reconnect required') {
             return 'Reconnect required';
         }
-        if (empty($this->credentials['refresh_token'])) {
-            return 'No refresh token';
+        $due = $this->nextTokenRefreshAt();
+        if ($due === null) {
+            return 'Connect to enable';
         }
-        $deadline = $this->refreshTokenDeadline();
-        if ($deadline === null) {
-            return 'Expiry not provided';
-        }
-        if ($deadline->lte(now())) {
-            return 'Expired';
-        }
-        $days = (int) ceil(now()->diffInDays($deadline));
-        $estimated = ! isset($this->credentials['refresh_token_expires_at']);
 
-        return ($estimated ? '≈' : '').$days.' '.Str::plural('day', $days).' left';
-    }
-
-    public function refreshTokenDescription(): ?string
-    {
-        if ($this->auth_type !== 'oauth' || empty($this->credentials['refresh_token'])) {
-            return null;
-        }
-        $policy = isset($this->credentials['refresh_token_expires_at']) ? 'Provider expiry' : ($this->refreshTokenDeadline() ? 'Google inactivity estimate' : 'Provider does not disclose expiry');
-
-        return $policy.' · '.($this->enabled && $this->status !== 'Reconnect required' ? 'Auto-refresh enabled' : 'Auto-refresh paused');
+        return $due->lte(now()) ? 'Next scheduled check' : $due->diffForHumans();
     }
 
     /**

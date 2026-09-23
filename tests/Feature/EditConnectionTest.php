@@ -137,17 +137,20 @@ test('changing the issuer invalidates old tokens and preserves the override in t
     Http::assertNothingSent();
 });
 
-test('connection list shows refresh token days remaining without confusing unknown expiry with unlimited access', function () {
-    $this->travelTo(now()->setDate(2026, 9, 23)->startOfDay());
+test('connection list shows successful refresh history and the next refresh instead of unknown expiry', function () {
+    $this->travelTo(now()->startOfSecond());
     editOwner();
-    $known = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'known-secret', 'refresh_token_expires_at' => now()->addDays(12)->timestamp]]);
-    $google = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'google-secret', 'last_token_refresh_at' => now()->timestamp, 'metadata' => ['issuer' => 'https://accounts.google.com']]]);
-    $unknown = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'unknown-secret']]);
-    $expired = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'expired-secret', 'refresh_token_expires_at' => now()->subMinute()->timestamp]]);
-    $disabled = McpConnection::factory()->create(['enabled' => false, 'auth_type' => 'oauth', 'credentials' => ['refresh_token' => 'paused-secret']]);
+    McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'access_token' => 'access-secret', 'refresh_token' => 'refresh-secret',
+        'last_token_refresh_at' => now()->subHours(2)->timestamp, 'expires_at' => now()->addMinutes(35)->timestamp,
+    ]]);
+    McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['access_token' => 'old', 'refresh_token' => 'legacy']]);
+    McpConnection::factory()->create(['enabled' => false, 'auth_type' => 'oauth']);
 
     Livewire::test(ManageMcpConnections::class)
-        ->assertSee('12 days left')->assertSee('≈181 days left')->assertSee('Google inactivity estimate')
-        ->assertSee('Expiry not provided')->assertSee('Expired')->assertSee('Auto-refresh paused')
-        ->assertDontSee('known-secret')->assertDontSee('google-secret');
+        ->assertSee('Last successful refresh')->assertSee('Next refresh due')
+        ->assertSee('2 hours ago')->assertSee('30 minutes from now')
+        ->assertSee('Not recorded yet')->assertSee('Next scheduled check')->assertSee('Paused')
+        ->assertDontSee('Provider does not disclose expiry')->assertDontSee('Expiry not provided')
+        ->assertDontSee('access-secret')->assertDontSee('refresh-secret');
 });

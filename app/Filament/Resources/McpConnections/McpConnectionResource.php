@@ -75,15 +75,11 @@ class McpConnectionResource extends Resource
                 'Authorization required', 'Not checked' => 'warning',
                 default => 'danger',
             }),
-            TextColumn::make('refresh_token_lifetime')->label('Refresh token')->badge()
-                ->state(fn (McpConnection $record): string => $record->refreshTokenLifetime())
-                ->description(fn (McpConnection $record): ?string => $record->refreshTokenDescription())
-                ->color(fn (McpConnection $record): string => match (true) {
-                    $record->status === 'Reconnect required', $record->refreshTokenDeadline()?->isPast() === true => 'danger',
-                    $record->refreshTokenDeadline()?->lte(now()->addDays(7)) === true => 'warning',
-                    default => 'gray',
-                })
-                ->tooltip(fn (McpConnection $record): ?string => $record->refreshTokenDeadline()?->toDayDateTimeString()),
+            TextColumn::make('last_token_refresh')->label('Last successful refresh')
+                ->state(fn (McpConnection $record): string => $record->lastTokenRefreshLabel()),
+            TextColumn::make('next_token_refresh')->label('Next refresh due')
+                ->state(fn (McpConnection $record): string => $record->nextTokenRefreshLabel())
+                ->tooltip('Automatic refreshes are checked every five minutes.'),
             ToggleColumn::make('enabled')->label('Enabled'),
         ])->recordActions([
             Action::make('connect')->label(fn (McpConnection $record): string => empty($record->credentials['access_token']) ? 'Connect' : 'Reconnect')
