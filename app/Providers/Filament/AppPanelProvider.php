@@ -26,6 +26,7 @@ class AppPanelProvider extends PanelProvider
             ->default()
             ->id('app')
             ->brandName('Austin Devs MCP')
+            ->favicon(asset('favicon.svg'))
             ->brandLogo(fn () => view('filament.brand'))
             ->font('Jost')
             ->viteTheme('resources/css/app.css')

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" class="ad-mark" role="img" aria-label="Austin Devs">
+  <style>
+    .ad-mark .s { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: butt; stroke-linejoin: miter; }
+    @media (min-resolution: 1.5dppx) { .ad-mark .s { stroke-width: 4.2; } }
+  </style>
+  <rect class="s" x="2.5" y="2.5" width="83" height="83"/>
+  <polyline class="s" points="34,35.66 16,44 34,52.34"/>
+  <polyline class="s" points="54,35.66 72,44 54,52.34"/>
+  <line class="s" x1="50.95" y1="29" x2="37.05" y2="59"/>
+</svg>
