@@ -35,6 +35,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'obsidian_upload' => [
+        'url' => env('OBSIDIAN_UPLOAD_URL', 'http://obsidian-mcpvault:3333/upload'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
