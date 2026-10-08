@@ -221,3 +221,49 @@ test('an issuer override uses Google metadata without probing the protected reso
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'google-workspace-mcp'));
     expect($connection->fresh()->credentials['metadata']['issuer'])->toBe('https://accounts.google.com');
 });
+
+test('Google connections without a client use the gateway Google app without storing its secret', function () {
+    config(['services.google.client_id' => 'gateway-google-client', 'services.google.client_secret' => 'gateway-google-secret']);
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'url' => 'http://google-workspace-mcp:8000/mcp']);
+    Http::preventStrayRequests();
+    Http::fake([
+        'http://google-workspace-mcp:8000/mcp' => Http::response([], 401, ['WWW-Authenticate' => 'Bearer resource_metadata="http://google-workspace-mcp:8000/.well-known/oauth-protected-resource/mcp"']),
+        'http://google-workspace-mcp:8000/.well-known/oauth-protected-resource/mcp' => Http::response(['authorization_servers' => ['https://accounts.google.com'], 'scopes_supported' => ['openid', 'email']]),
+        'https://accounts.google.com/.well-known/oauth-authorization-server' => Http::response('', 404),
+        'https://accounts.google.com/.well-known/openid-configuration' => Http::response([
+            'issuer' => 'https://accounts.google.com', 'authorization_endpoint' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_endpoint' => 'https://oauth2.googleapis.com/token', 'code_challenge_methods_supported' => ['S256'],
+            'token_endpoint_auth_methods_supported' => ['client_secret_post', 'client_secret_basic'],
+        ]),
+        'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'google-access', 'refresh_token' => 'google-refresh', 'expires_in' => 3599]),
+    ]);
+
+    $response = $this->post(route('upstream.connect', $connection))->assertRedirectContains('https://accounts.google.com/o/oauth2/v2/auth');
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+    expect($query['client_id'])->toBe('gateway-google-client');
+    expect(GatewayLog::where('category', 'oauth')->sole()->context['registration'])->toBe('gateway');
+
+    $this->get(route('upstream.callback').'?'.http_build_query(['state' => $query['state'], 'code' => 'authorization-code']))->assertRedirect();
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://oauth2.googleapis.com/token'
+        && $request->hasHeader('Authorization', 'Basic '.base64_encode('gateway-google-client:gateway-google-secret')));
+    expect($connection->fresh()->credentials)->toMatchArray(['access_token' => 'google-access', 'refresh_token' => 'google-refresh'])
+        ->not->toHaveKeys(['client_id', 'client_secret']);
+});
+
+test('a Google connection with its own client keeps using it over the gateway Google app', function () {
+    config(['services.google.client_id' => 'gateway-google-client', 'services.google.client_secret' => 'gateway-google-secret']);
+    $this->freezeTime();
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'client_id' => 'own-client', 'client_secret' => 'own-secret', 'send_resource' => false,
+        'access_token' => 'expired', 'refresh_token' => 'google-refresh', 'expires_at' => now()->subMinute()->timestamp,
+        'metadata' => ['issuer' => 'https://accounts.google.com', 'token_endpoint' => 'https://oauth2.googleapis.com/token', 'token_endpoint_auth_methods_supported' => ['client_secret_post']],
+    ]]);
+    Http::preventStrayRequests();
+    Http::fake(['https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'google-access', 'expires_in' => 3599])]);
+
+    app(UpstreamOAuth::class)->refresh($connection);
+
+    Http::assertSent(fn ($request) => $request['client_id'] === 'own-client' && $request['client_secret'] === 'own-secret');
+});

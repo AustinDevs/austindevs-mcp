@@ -54,7 +54,7 @@ class McpConnectionResource extends Resource
                 },
             ]),
             Select::make('auth_type')->label('Authentication')->options(['none' => 'None / custom headers', 'oauth' => 'OAuth (automatic discovery)', 'bearer' => 'Bearer token'])->default('oauth')->required()->live(),
-            TextInput::make('credentials.client_id')->label('OAuth client ID')->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText(fn (): string => 'Leave blank for dynamic registration. For manual registration, use callback URL: '.route('upstream.callback')),
+            TextInput::make('credentials.client_id')->label('OAuth client ID')->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText(fn (): string => 'Leave blank for dynamic registration, or for Google to use the gateway\'s own Google app. For manual registration, use callback URL: '.route('upstream.callback')),
             TextInput::make('credentials.client_secret')->label('OAuth client secret')->password()->revealable()->visible(fn (Get $get): bool => $get('auth_type') === 'oauth'),
             TextInput::make('credentials.issuer')->label('OAuth issuer override (optional)')->url()->maxLength(2048)->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('Use only when server discovery is unavailable. For Google Workspace: https://accounts.google.com. Changing this requires reconnecting.'),
             TextInput::make('credentials.scope')->label('OAuth scopes (optional)')->visible(fn (Get $get): bool => $get('auth_type') === 'oauth')->helperText('Space-separated; leave blank to use advertised scopes.'),

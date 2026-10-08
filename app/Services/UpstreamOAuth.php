@@ -80,7 +80,10 @@ class UpstreamOAuth
         }
         $redirect = route('upstream.callback');
         $registration = 'manual';
-        if (empty($credentials['client_id'])) {
+        $gatewayClient = $this->gatewayClient($credentials, $issuer);
+        if ($gatewayClient !== null) {
+            $registration = 'gateway';
+        } elseif (empty($credentials['client_id'])) {
             if (empty($metadata['registration_endpoint'])) {
                 throw new RuntimeException('This server does not support dynamic registration. Edit the connection and enter a client ID and secret.');
             }
@@ -102,7 +105,7 @@ class UpstreamOAuth
         session()->put('upstream.'.$connection->id, ['state' => $state, 'verifier' => $verifier, 'expires' => now()->addMinutes(10)->timestamp]);
         session()->put('upstream-states.'.$state, $connection->id);
         $query = [
-            'client_id' => $credentials['client_id'], 'redirect_uri' => $redirect, 'response_type' => 'code', 'state' => $state,
+            'client_id' => $gatewayClient['client_id'] ?? $credentials['client_id'], 'redirect_uri' => $redirect, 'response_type' => 'code', 'state' => $state,
             'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='), 'code_challenge_method' => 'S256',
         ];
         if ($credentials['send_resource'] ?? true) {
@@ -158,21 +161,39 @@ class UpstreamOAuth
         return $expiresAt !== null && $expiresAt <= now()->addSeconds(30)->timestamp;
     }
 
+    /**
+     * Google connections without their own client use the gateway's Google app, read from config at
+     * use so the secret stays in the environment and is never copied into connection credentials.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array{client_id: string, client_secret: ?string}|null
+     */
+    private function gatewayClient(array $credentials, ?string $issuer): ?array
+    {
+        if (filled($credentials['client_id'] ?? null) || rtrim((string) $issuer, '/') !== 'https://accounts.google.com' || blank(config('services.google.client_id'))) {
+            return null;
+        }
+
+        return ['client_id' => config('services.google.client_id'), 'client_secret' => config('services.google.client_secret')];
+    }
+
     /** @param array<string, string> $params */
     private function token(McpConnection $connection, array $params): void
     {
         $credentials = $connection->credentials;
-        $params += ['client_id' => $credentials['client_id']];
+        $client = $this->gatewayClient($credentials, $credentials['metadata']['issuer'] ?? null)
+            ?? ['client_id' => $credentials['client_id'], 'client_secret' => $credentials['client_secret'] ?? null];
+        $params += ['client_id' => $client['client_id']];
         if ($credentials['send_resource'] ?? true) {
             $params['resource'] = $connection->url;
         }
         $http = $this->http()->asForm();
-        if (! empty($credentials['client_secret'])) {
+        if (! empty($client['client_secret'])) {
             $methods = $credentials['metadata']['token_endpoint_auth_methods_supported'] ?? ['client_secret_basic'];
             if (in_array('client_secret_basic', $methods, true)) {
-                $http = $http->withBasicAuth($credentials['client_id'], $credentials['client_secret']);
+                $http = $http->withBasicAuth($client['client_id'], $client['client_secret']);
             } else {
-                $params['client_secret'] = $credentials['client_secret'];
+                $params['client_secret'] = $client['client_secret'];
             }
         }
         $response = $http->post(RemoteUrl::validate($credentials['metadata']['token_endpoint']), $params);
