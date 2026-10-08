@@ -42,6 +42,8 @@ class ServiceIcon
         'jira' => ['jira'],
         'asana' => ['asana'],
         'diffui' => ['diffui', 'diff ui'],
+        'auth0' => ['auth0'],
+        'raindrop' => ['raindrop'],
         'github' => ['github'],
         'gitlab' => ['gitlab'],
         'bitbucket' => ['bitbucket'],
