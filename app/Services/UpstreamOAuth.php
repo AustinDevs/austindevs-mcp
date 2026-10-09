@@ -55,6 +55,7 @@ class UpstreamOAuth
                 }
             }
             $issuer = $resource === null ? $origin : ($resource['authorization_servers'][0] ?? throw new RuntimeException('Protected resource metadata at '.$resourceUrl.' lists no authorization server.'));
+            $issuer = $this->matchConnectionScheme($issuer, $connection->url);
         }
         $issuerOrigin = RemoteUrl::origin($issuer);
         $issuerPath = rtrim(parse_url($issuer, PHP_URL_PATH) ?: '', '/');
@@ -166,6 +167,22 @@ class UpstreamOAuth
         $expiresAt = $connection->credentials['expires_at'] ?? null;
 
         return $expiresAt !== null && $expiresAt <= now()->addSeconds(30)->timestamp;
+    }
+
+    /**
+     * Servers behind a TLS-terminating proxy (Keeper behind Cloudflare and Caddy) can advertise their own
+     * authorization server as http://. Upgrade it only when it is the same host as an https:// MCP URL.
+     */
+    private function matchConnectionScheme(string $issuer, string $connectionUrl): string
+    {
+        $issuerParts = parse_url($issuer);
+        $connectionParts = parse_url($connectionUrl);
+        if (($issuerParts['scheme'] ?? null) === 'http' && ($connectionParts['scheme'] ?? null) === 'https'
+            && isset($issuerParts['host'], $connectionParts['host']) && strcasecmp($issuerParts['host'], $connectionParts['host']) === 0 && ! isset($issuerParts['port'])) {
+            return 'https'.substr($issuer, 4);
+        }
+
+        return $issuer;
     }
 
     /**

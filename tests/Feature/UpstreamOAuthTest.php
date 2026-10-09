@@ -302,3 +302,40 @@ test('non-Google authorization leaves the prompt alone', function () {
 
     expect($query)->not->toHaveKeys(['prompt', 'access_type']);
 });
+
+test('an http authorization server on the same host as an https MCP URL is upgraded to https', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'url' => 'https://keeper.example.com/mcp']);
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://keeper.example.com/mcp' => Http::response([], 401, ['WWW-Authenticate' => 'Bearer resource_metadata="https://keeper.example.com/.well-known/oauth-protected-resource"']),
+        'https://keeper.example.com/.well-known/oauth-protected-resource' => Http::response(['resource' => 'http://keeper.example.com/mcp', 'authorization_servers' => ['http://keeper.example.com/api/auth'], 'scopes_supported' => ['keeper.read']]),
+        'https://keeper.example.com/.well-known/oauth-authorization-server/api/auth' => Http::response([
+            'issuer' => 'https://keeper.example.com/api/auth', 'authorization_endpoint' => 'https://keeper.example.com/api/auth/oauth2/authorize',
+            'token_endpoint' => 'https://keeper.example.com/api/auth/oauth2/token', 'registration_endpoint' => 'https://keeper.example.com/api/auth/oauth2/register', 'code_challenge_methods_supported' => ['S256'],
+        ]),
+        'https://keeper.example.com/api/auth/oauth2/register' => Http::response(['client_id' => 'keeper-client']),
+    ]);
+
+    $this->post(route('upstream.connect', $connection))->assertRedirectContains('https://keeper.example.com/api/auth/oauth2/authorize');
+
+    Http::assertNotSent(fn ($request) => str_starts_with($request->url(), 'http://'));
+    expect(GatewayLog::where('category', 'oauth')->sole()->context['issuer'])->toBe('https://keeper.example.com/api/auth');
+});
+
+test('an http authorization server on another host is not upgraded', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'url' => 'https://mcp.example.com/mcp']);
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://mcp.example.com/mcp' => Http::response([], 401, ['WWW-Authenticate' => 'Bearer resource_metadata="https://mcp.example.com/metadata"']),
+        'https://mcp.example.com/metadata' => Http::response(['authorization_servers' => ['http://auth.example.com']]),
+        'http://auth.example.com/.well-known/oauth-authorization-server' => Http::response([
+            'issuer' => 'http://auth.example.com', 'authorization_endpoint' => 'http://auth.example.com/authorize',
+            'token_endpoint' => 'http://auth.example.com/token', 'registration_endpoint' => 'http://auth.example.com/register', 'code_challenge_methods_supported' => ['S256'],
+        ]),
+        'http://auth.example.com/register' => Http::response(['client_id' => 'client']),
+    ]);
+
+    $this->post(route('upstream.connect', $connection))->assertRedirectContains('http://auth.example.com/authorize');
+});
