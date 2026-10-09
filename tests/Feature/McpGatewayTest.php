@@ -62,9 +62,19 @@ test('enabled connections appear as wrappers and disabling or deleting removes t
     $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertJsonCount(1, 'result.tools');
 });
 
+test('tool discovery lists connections alphabetically by name', function () {
+    gatewayOwner();
+    $zulu = McpConnection::factory()->create(['name' => 'Zulu']);
+    $alpha = McpConnection::factory()->create(['name' => 'Alpha']);
+
+    $this->withToken('test-token')->postJson('/mcp', gatewayRequest('tools/list'))->assertOk()
+        ->assertJsonPath('result.tools.0.name', $alpha->toolName())
+        ->assertJsonPath('result.tools.1.name', $zulu->toolName());
+});
+
 test('tool discovery returns every enabled connection and gateway logs on the first page', function () {
     gatewayOwner();
-    McpConnection::factory()->count(60)->create();
+    McpConnection::factory()->count(60)->sequence(fn ($sequence): array => ['name' => 'Alpha '.$sequence->index])->create();
     $obsidian = McpConnection::factory()->create(['name' => 'Obsidian']);
     McpConnection::factory()->create(['enabled' => false]);
 

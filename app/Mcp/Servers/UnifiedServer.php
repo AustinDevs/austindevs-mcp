@@ -18,7 +18,7 @@ class UnifiedServer extends Server
     protected function boot(): void
     {
         $this->tools = [
-            ...McpConnection::query()->where('enabled', true)->orderBy('id')->get()->map(fn (McpConnection $connection): ConnectionTool => new ConnectionTool($connection))->all(),
+            ...McpConnection::query()->where('enabled', true)->orderBy('name')->get()->map(fn (McpConnection $connection): ConnectionTool => new ConnectionTool($connection))->all(),
             GatewayLogsTool::class,
         ];
 

@@ -153,3 +153,14 @@ test('connection list shows successful refresh history and the next refresh inst
         ->assertDontSee('Provider does not disclose expiry')->assertDontSee('Expiry not provided')
         ->assertDontSee('access-secret')->assertDontSee('refresh-secret');
 });
+
+test('the connections table lists servers alphabetically, 50 per page', function () {
+    editOwner();
+    $zulu = McpConnection::factory()->create(['name' => 'Zulu']);
+    $alpha = McpConnection::factory()->create(['name' => 'Alpha']);
+    $mike = McpConnection::factory()->create(['name' => 'Mike']);
+
+    Livewire::test(ManageMcpConnections::class)
+        ->assertCanSeeTableRecords([$alpha, $mike, $zulu], inOrder: true)
+        ->assertSet('tableRecordsPerPage', 50);
+});

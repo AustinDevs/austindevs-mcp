@@ -67,7 +67,7 @@ class McpConnectionResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table->poll('60s')->defaultSort('id', 'desc')->columns([
+        return $table->poll('60s')->defaultSort('name')->defaultPaginationPageOption(50)->columns([
             ImageColumn::make('favicon')->label('')->size(28)->state(fn (McpConnection $record): string => $record->iconUrl()),
             TextColumn::make('name')->searchable()->description(fn (McpConnection $record): string => $record->url),
             TextColumn::make('status')->badge()->color(fn (string $state): string => match ($state) {

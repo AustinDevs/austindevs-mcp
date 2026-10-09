@@ -12,6 +12,8 @@ use RuntimeException;
 
 class UpstreamOAuth
 {
+    private const GOOGLE_ISSUER = 'https://accounts.google.com';
+
     public function __construct(private ActivityLogger $logger) {}
 
     private function http(): PendingRequest
@@ -116,6 +118,11 @@ class UpstreamOAuth
             $query['scope'] = $scope;
         }
         $query += Arr::except($credentials['authorize_params'] ?? [], ['client_id', 'redirect_uri', 'response_type', 'state', 'code_challenge', 'code_challenge_method', 'resource', 'scope']);
+        if (rtrim($issuer, '/') === self::GOOGLE_ISSUER) {
+            $prompts = preg_split('/\s+/', $query['prompt'] ?? 'consent', -1, PREG_SPLIT_NO_EMPTY);
+            $query['prompt'] = implode(' ', array_unique(['select_account', ...$prompts]));
+            $query += ['access_type' => 'offline'];
+        }
         $this->logger->info('oauth', 'Discovered OAuth server for '.$connection->name, [
             'resource_metadata_url' => $resourceUrl, 'issuer' => $issuer, 'authorization_endpoint' => $metadata['authorization_endpoint'], 'token_endpoint' => $metadata['token_endpoint'],
             'registration' => $registration, 'scope' => $scope, 'redirect_uri' => $redirect,
@@ -170,7 +177,7 @@ class UpstreamOAuth
      */
     private function gatewayClient(array $credentials, ?string $issuer): ?array
     {
-        if (filled($credentials['client_id'] ?? null) || rtrim((string) $issuer, '/') !== 'https://accounts.google.com' || blank(config('services.google.client_id'))) {
+        if (filled($credentials['client_id'] ?? null) || rtrim((string) $issuer, '/') !== self::GOOGLE_ISSUER || blank(config('services.google.client_id'))) {
             return null;
         }
 

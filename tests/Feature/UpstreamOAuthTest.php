@@ -267,3 +267,38 @@ test('a Google connection with its own client keeps using it over the gateway Go
 
     Http::assertSent(fn ($request) => $request['client_id'] === 'own-client' && $request['client_secret'] === 'own-secret');
 });
+
+test('Google authorization always shows the account chooser and requests offline access', function (array $authorizeParams, string $prompt) {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'issuer' => 'https://accounts.google.com', 'client_id' => 'google-client', 'scope' => 'openid email', 'authorize_params' => $authorizeParams,
+    ]]);
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://accounts.google.com/.well-known/oauth-authorization-server' => Http::response('', 404),
+        'https://accounts.google.com/.well-known/openid-configuration' => Http::response([
+            'issuer' => 'https://accounts.google.com', 'authorization_endpoint' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_endpoint' => 'https://oauth2.googleapis.com/token', 'code_challenge_methods_supported' => ['S256'],
+        ]),
+    ]);
+
+    $response = $this->post(route('upstream.connect', $connection))->assertRedirect();
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+    expect($query)->toMatchArray(['prompt' => $prompt, 'access_type' => 'offline']);
+})->with([
+    'no parameters' => [[], 'select_account consent'],
+    'consent only' => [['prompt' => 'consent'], 'select_account consent'],
+    'already choosing' => [['prompt' => 'consent select_account'], 'select_account consent'],
+]);
+
+test('non-Google authorization leaves the prompt alone', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => ['client_id' => 'manual-client']]);
+    fakeUpstreamOAuth();
+
+    $response = $this->post(route('upstream.connect', $connection))->assertRedirect();
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+    expect($query)->not->toHaveKeys(['prompt', 'access_type']);
+});
