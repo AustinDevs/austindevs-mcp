@@ -44,6 +44,7 @@ class ServiceIcon
         'diffui' => ['diffui', 'diff ui'],
         'auth0' => ['auth0'],
         'raindrop' => ['raindrop'],
+        'keeper' => ['keeper'],
         'github' => ['github'],
         'gitlab' => ['gitlab'],
         'bitbucket' => ['bitbucket'],
