@@ -4,6 +4,12 @@ namespace App\Services;
 
 /**
  * Resolves a bundled brand icon for a connection from its name or URL host when no favicon was fetched.
+ *
+ * DaVinci Resolve icon: Blackmagic Design, unmodified, CC BY-SA 4.0.
+ * https://commons.wikimedia.org/wiki/File:DaVinci_Resolve_Studio.png
+ * https://creativecommons.org/licenses/by-sa/4.0/
+ * REAPER icon: https://www.reaper.fm/favicon.ico
+ * darktable icon: https://www.darktable.org/images/darktable-logo-only-512w.png
  */
 class ServiceIcon
 {
@@ -18,6 +24,9 @@ class ServiceIcon
      * @var array<string, list<string>>
      */
     private const KEYWORDS = [
+        'davinci-resolve' => ['davinci resolve', 'davinci_resolve', 'davinci-resolve', 'davinci'],
+        'reaper' => ['reaper'],
+        'darktable' => ['darktable'],
         'actual-budget' => ['actual budget', 'actualbudget', 'actual'],
         'google-workspace' => ['google workspace', 'workspace', 'gsuite'],
         'google-calendar' => ['google calendar', 'gcal'],

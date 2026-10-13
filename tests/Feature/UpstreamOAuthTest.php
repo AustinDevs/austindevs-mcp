@@ -290,7 +290,48 @@ test('Google authorization always shows the account chooser and requests offline
     'no parameters' => [[], 'select_account consent'],
     'consent only' => [['prompt' => 'consent'], 'select_account consent'],
     'already choosing' => [['prompt' => 'consent select_account'], 'select_account consent'],
+    'chooser without consent' => [['prompt' => 'select_account'], 'select_account consent'],
+    'online access override' => [['access_type' => 'online'], 'select_account consent'],
+    'silent authorization override' => [['prompt' => 'none'], 'select_account consent'],
+    'empty prompt override' => [['prompt' => ''], 'select_account consent'],
 ]);
+
+test('Google callbacks without offline access require reconnecting instead of reporting success', function () {
+    $this->actingAs(User::factory()->create());
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'client_id' => 'google-client',
+        'metadata' => ['issuer' => 'https://accounts.google.com', 'token_endpoint' => 'https://oauth2.googleapis.com/token'],
+    ]]);
+    $state = str_repeat('a', 64);
+    $this->withSession([
+        'upstream-states.'.$state => $connection->id,
+        'upstream.'.$connection->id => ['state' => $state, 'verifier' => 'verifier', 'expires' => now()->addMinutes(10)->timestamp],
+    ]);
+    Http::preventStrayRequests();
+    Http::fake(['https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'short-lived', 'expires_in' => 3599])]);
+
+    $this->get(route('upstream.callback').'?'.http_build_query(['state' => $state, 'code' => 'code']))->assertRedirect();
+
+    expect($connection->fresh()->status)->toBe('Reconnect required');
+    expect($connection->fresh()->nextTokenRefreshAt())->toBeNull();
+    expect(GatewayLog::where('level', 'error')->sole()->message)->toContain('Google did not provide offline access');
+    Http::assertSentCount(1);
+});
+
+test('Google exchanges preserve an existing refresh token when no replacement is returned', function () {
+    $connection = McpConnection::factory()->create(['auth_type' => 'oauth', 'credentials' => [
+        'client_id' => 'google-client', 'refresh_token' => 'existing-refresh',
+        'metadata' => ['issuer' => 'https://accounts.google.com', 'token_endpoint' => 'https://oauth2.googleapis.com/token'],
+    ]]);
+    Http::preventStrayRequests();
+    Http::fake(['https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'new-access', 'expires_in' => 3599])]);
+
+    app(UpstreamOAuth::class)->exchange($connection, 'code', 'verifier');
+
+    expect($connection->fresh()->credentials)->toMatchArray(['access_token' => 'new-access', 'refresh_token' => 'existing-refresh']);
+    expect($connection->fresh()->status)->toBe('Connected');
+    Http::assertSentCount(1);
+});
 
 test('non-Google authorization leaves the prompt alone', function () {
     $this->actingAs(User::factory()->create());

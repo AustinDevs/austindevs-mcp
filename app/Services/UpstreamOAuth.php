@@ -120,9 +120,8 @@ class UpstreamOAuth
         }
         $query += Arr::except($credentials['authorize_params'] ?? [], ['client_id', 'redirect_uri', 'response_type', 'state', 'code_challenge', 'code_challenge_method', 'resource', 'scope']);
         if (rtrim($issuer, '/') === self::GOOGLE_ISSUER) {
-            $prompts = preg_split('/\s+/', $query['prompt'] ?? 'consent', -1, PREG_SPLIT_NO_EMPTY);
-            $query['prompt'] = implode(' ', array_unique(['select_account', ...$prompts]));
-            $query += ['access_type' => 'offline'];
+            $query['prompt'] = 'select_account consent';
+            $query['access_type'] = 'offline';
         }
         $this->logger->info('oauth', 'Discovered OAuth server for '.$connection->name, [
             'resource_metadata_url' => $resourceUrl, 'issuer' => $issuer, 'authorization_endpoint' => $metadata['authorization_endpoint'], 'token_endpoint' => $metadata['token_endpoint'],
@@ -243,6 +242,12 @@ class UpstreamOAuth
         $credentials['access_token'] = $response->json('access_token');
         $credentials['refresh_token'] = $response->json('refresh_token') ?? ($credentials['refresh_token'] ?? null);
         $credentials['expires_at'] = $response->json('expires_in') ? now()->addSeconds((int) $response->json('expires_in'))->timestamp : null;
+        if (rtrim($credentials['metadata']['issuer'] ?? '', '/') === self::GOOGLE_ISSUER && empty($credentials['refresh_token'])) {
+            $connection->update(['credentials' => $credentials, 'status' => 'Reconnect required']);
+            $this->logger->warning('oauth', 'Google did not provide a refresh token for '.$connection->name, ['grant_type' => $params['grant_type']], $connection);
+
+            throw new RuntimeException('Google did not provide offline access. Reconnect this server and approve the consent screen to enable automatic refresh.');
+        }
         $connection->update(['credentials' => $credentials, 'status' => 'Connected']);
         $this->logger->info('oauth', 'OAuth '.$params['grant_type'].' succeeded for '.$connection->name, [
             'grant_type' => $params['grant_type'], 'expires_in' => $response->json('expires_in'), 'has_refresh_token' => ! empty($credentials['refresh_token']),

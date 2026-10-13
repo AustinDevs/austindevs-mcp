@@ -154,3 +154,10 @@ test('legacy tokens with no refresh history receive an initial keepalive', funct
     expect($connection->fresh()->credentials['last_token_refresh_at'])->toBe(now()->timestamp);
     Http::assertSentCount(1);
 });
+
+test('connections without a refresh token explain why automatic refresh is unavailable', function () {
+    $connection = scheduledOAuthConnection(['refresh_token' => null]);
+
+    expect($connection->nextTokenRefreshLabel())->toBe('No refresh token — reconnect');
+    expect($connection->nextTokenRefreshAt())->toBeNull();
+});

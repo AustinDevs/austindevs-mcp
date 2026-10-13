@@ -69,6 +69,9 @@ class McpConnection extends Model
         if ($this->status === 'Reconnect required') {
             return 'Reconnect required';
         }
+        if (! empty($this->credentials['access_token']) && empty($this->credentials['refresh_token'])) {
+            return 'No refresh token — reconnect';
+        }
         $due = $this->nextTokenRefreshAt();
         if ($due === null) {
             return 'Connect to enable';

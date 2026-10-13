@@ -24,6 +24,10 @@ test('brand icons resolve from the connection name', function (string $name, str
     ['Google Workspace', '/img/services/google-workspace.png'],
     ['My Google thing', '/img/services/google.svg'],
     ['Dropbox files', '/img/services/dropbox.svg'],
+    ['DaVinci Resolve Studio', '/img/services/davinci-resolve.png'],
+    ['davinci_resolve_studio', '/img/services/davinci-resolve.png'],
+    ['REAPER MCP', '/img/services/reaper.ico'],
+    ['darktable MCP', '/img/services/darktable.png'],
 ]);
 
 test('brand icons resolve from the URL host when the name does not match', function () {
