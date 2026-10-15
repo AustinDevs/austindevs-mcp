@@ -34,6 +34,30 @@ test('failed upstream requests are not retried', function () {
     Http::assertSentCount(1);
 });
 
+test('a rejected initialized notification does not fail the session', function () {
+    $connection = McpConnection::factory()->create();
+    Http::preventStrayRequests();
+    Http::fake(['https://mcp.example.com/mcp' => Http::sequence()
+        ->push(['jsonrpc' => '2.0', 'id' => 1, 'result' => ['protocolVersion' => '2025-06-18']])
+        ->push(['jsonrpc' => '2.0', 'error' => ['code' => -32601, 'message' => 'Method not found']], 400)
+        ->push(['jsonrpc' => '2.0', 'id' => 3, 'result' => ['tools' => [['name' => 'domain_lookup']]]]),
+    ]);
+    $client = new RemoteMcpClient($connection);
+    $client->initialize();
+    expect($client->tools())->toBe([['name' => 'domain_lookup']]);
+    Http::assertSentCount(3);
+});
+
+test('a 401 on a notification still fails so expired auth surfaces', function () {
+    $connection = McpConnection::factory()->create();
+    Http::preventStrayRequests();
+    Http::fake(['https://mcp.example.com/mcp' => Http::sequence()
+        ->push(['jsonrpc' => '2.0', 'id' => 1, 'result' => ['protocolVersion' => '2025-06-18']])
+        ->push('', 401),
+    ]);
+    expect(fn () => (new RemoteMcpClient($connection))->initialize())->toThrow(RuntimeException::class, 'Authentication expired. Reconnect this server.');
+});
+
 test('disabling a connection prevents calls through an already constructed client', function () {
     $connection = McpConnection::factory()->create();
     $client = new RemoteMcpClient($connection);

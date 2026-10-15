@@ -71,6 +71,14 @@ class RemoteMcpClient
         $response = Http::withHeaders($headers)->withoutRedirecting()->connectTimeout(5)->timeout(60)
             ->post(RemoteUrl::validate($this->connection->url), $payload);
         if (! $response->successful()) {
+            if ($notification && $response->status() !== 401) {
+                // A notification expects no reply, and some servers (domaindetails.com) answer ones they don't implement with a 400.
+                // Nothing depends on it, so keep the session going instead of failing the whole connection.
+                app(ActivityLogger::class)->warning('upstream', 'Upstream rejected notification with HTTP '.$response->status(), ['method' => $method, 'status' => $response->status(), 'body' => $response->body()], $this->connection);
+                $this->sessionId = $response->header('Mcp-Session-Id') ?: $this->sessionId;
+
+                return [];
+            }
             app(ActivityLogger::class)->error('upstream', 'Upstream returned HTTP '.$response->status(), ['method' => $method, 'status' => $response->status(), 'body' => $response->body()], $this->connection);
             throw new RuntimeException($response->status() === 401 ? 'Authentication expired. Reconnect this server.' : 'Upstream returned HTTP '.$response->status().'.');
         }
